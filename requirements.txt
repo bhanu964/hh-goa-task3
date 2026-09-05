@@ -1,0 +1,25 @@
+# HH Goa 2026 — Task 3
+# Python 3.10+ (developed and tested on 3.13)
+
+# --- Face detection & embedding (InsightFace / ArcFace on ONNX Runtime) ---
+insightface==1.0.1
+onnxruntime==1.29.0
+opencv-python-headless==5.0.0.93
+numpy==2.2.6
+pillow==12.3.0
+
+# --- Reverse image search (SerpApi -> Google Lens) ---
+serpapi==1.1.0
+requests==2.34.2
+
+# --- Blockchain (Ethereum via web3.py) ---
+web3==8.0.0
+eth-account==0.14.0
+
+# In-process EVM used by BLOCKCHAIN_NETWORK=memory and by the test suite.
+# Not needed if you only ever anchor on Sepolia or an external local node.
+eth-tester==0.14.0b1
+py-evm==0.12.1b1
+
+# --- Configuration ---
+python-dotenv==1.2.3

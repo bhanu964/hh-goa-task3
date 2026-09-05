@@ -1,0 +1,8 @@
+# Development extras — not needed to run the pipeline.
+-r requirements.txt
+
+pytest==9.1.1
+
+# Only needed to recompile contracts/FaceEvidenceRegistry.sol.
+# The compiled artifact is committed, so normal runs do not need this.
+py-solc-x==2.0.5

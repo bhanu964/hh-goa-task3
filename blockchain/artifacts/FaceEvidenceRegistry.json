@@ -1,0 +1,146 @@
+{
+  "contractName": "FaceEvidenceRegistry",
+  "solcVersion": "0.8.24",
+  "optimizer": {
+    "enabled": true,
+    "runs": 200
+  },
+  "abi": [
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "recordId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "fingerprint",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "submitter",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "timestamp",
+          "type": "uint64"
+        }
+      ],
+      "name": "EvidenceAnchored",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "fingerprint",
+          "type": "bytes32"
+        }
+      ],
+      "name": "anchor",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "recordId",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "recordId",
+          "type": "uint256"
+        }
+      ],
+      "name": "exists",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "recordId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getRecord",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "fingerprint",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "timestamp",
+          "type": "uint64"
+        },
+        {
+          "internalType": "address",
+          "name": "submitter",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "recordCount",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "recordId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "fingerprint",
+          "type": "bytes32"
+        }
+      ],
+      "name": "verify",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x608060405234801561000f575f80fd5b506103838061001d5f395ff3fe608060405234801561000f575f80fd5b5060043610610055575f3560e01c806303e9e609146100595780631d97ce311461009e5780634f558e79146100c1578063900407bc146100ef578063eecdf92714610106575b5f80fd5b61006c610067366004610316565b610119565b6040805193845267ffffffffffffffff90921660208401526001600160a01b0316908201526060015b60405180910390f35b6100b16100ac36600461032d565b6101c5565b6040519015158152602001610095565b6100b16100cf366004610316565b5f9081526020819052604090206001015467ffffffffffffffff16151590565b6100f860015481565b604051908152602001610095565b6100f8610114366004610316565b610224565b5f8181526020818152604080832081516060810183528154815260019091015467ffffffffffffffff8116938201849052600160401b90046001600160a01b031691810191909152829182919082036101ac5760405162461bcd60e51b815260206004820152601060248201526f1c9958dbdc99081b9bdd08199bdd5b9960821b60448201526064015b60405180910390fd5b8051602082015160409092015190969195509350915050565b5f8281526020818152604080832081516060810183528154815260019091015467ffffffffffffffff8116938201849052600160401b90046001600160a01b031691810191909152901580159061021c5750805183145b949350505050565b5f816102665760405162461bcd60e51b8152602060048201526011602482015270195b5c1d1e48199a5b99d95c9c1c9a5b9d607a1b60448201526064016101a3565b506001805481018082556040805160608101825284815267ffffffffffffffff4281166020808401828152338587018181525f89815280855288902096518755915195909801805491516001600160a01b0316600160401b026001600160e01b03199092169590941694909417939093179091559151918252919291849184917f3e3552597aaddbb060cdb5f4db8ac799001c5e9081b0bd4a01874a46fbf958e5910160405180910390a4919050565b5f60208284031215610326575f80fd5b5035919050565b5f806040838503121561033e575f80fd5b5050803592602090910135915056fea2646970667358221220076084c2ab218a18277f11cf2ccd7829f15b32b554f8f92bc943205fe5ca5f2564736f6c63430008180033"
+}
