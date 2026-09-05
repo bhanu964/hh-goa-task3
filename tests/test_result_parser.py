@@ -115,3 +115,34 @@ def test_ranking_does_not_drop_candidates():
     }
     parsed = parse_lens_response(payload)
     assert len(rank_candidates(parsed)) == len(parsed)
+
+
+def test_primary_social_platforms_get_the_top_tier():
+    from search.result_parser import TIER_PRIMARY_SOCIAL, platform_tier
+
+    for name in ("Instagram", "Facebook", "X (Twitter)", "LinkedIn", "Threads"):
+        assert platform_tier(name, True) == TIER_PRIMARY_SOCIAL
+
+
+def test_aggregators_sit_below_primary_social():
+    from search.result_parser import TIER_OTHER_SOCIAL, platform_tier
+
+    for name in ("Reddit", "YouTube", "Pinterest"):
+        assert platform_tier(name, True) == TIER_OTHER_SOCIAL
+
+
+def test_non_social_sites_get_the_lowest_tier():
+    from search.result_parser import TIER_NON_SOCIAL, platform_tier
+
+    assert platform_tier("bbc.co.uk", False) == TIER_NON_SOCIAL
+
+
+def test_instagram_is_inspected_before_reddit():
+    payload = {
+        "visual_matches": [
+            entry(1, "https://www.reddit.com/r/x/comments/1/"),
+            entry(2, "https://www.instagram.com/p/ABC/"),
+        ]
+    }
+    ranked = rank_candidates(parse_lens_response(payload))
+    assert ranked[0].platform == "Instagram"

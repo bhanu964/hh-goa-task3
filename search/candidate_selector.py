@@ -88,9 +88,11 @@ class CandidateSelector:
         download_timeout: int = 20,
         max_download_bytes: int = 12_000_000,
         max_checks: int = 12,
+        prefer_platform: str | None = None,
     ) -> None:
         self.encoder = encoder
         self.threshold = threshold
+        self.prefer_platform = prefer_platform
         self.download_timeout = download_timeout
         self.max_download_bytes = max_download_bytes
         self.max_checks = max_checks
@@ -200,20 +202,40 @@ class CandidateSelector:
 
         return SelectionReport(
             checked=checked,
-            best=self.select_best(checked),
+            best=self.select_best(checked, self.prefer_platform),
             fetch_failures=fetch_failures,
             no_face=no_face,
         )
 
     @staticmethod
-    def select_best(checked: list[VerifiedCandidate]) -> VerifiedCandidate | None:
+    def select_best(
+        checked: list[VerifiedCandidate],
+        prefer_platform: str | None = None,
+    ) -> VerifiedCandidate | None:
         """Pick the strongest verified candidate, or None if none passed.
 
-        Social-media results win over other sites because that is what the task
-        asks for; similarity decides within each group. Anything below the
-        threshold is never returned, however many results the search produced.
+        Ordering, in priority order:
+
+        1. ``prefer_platform``, when given and something from it passed.
+        2. Platform tier — a personal post on Instagram, Facebook or X is the
+           result the task is after, so it outranks an aggregator like Reddit
+           even when the aggregator serves a higher-resolution image and so
+           scores higher.
+        3. Similarity.
+
+        All of this only *orders candidates that already passed the face
+        check*. Nothing here can turn a non-matching page into a match: if no
+        candidate clears the threshold, this returns ``None`` regardless of
+        platform preference.
         """
         passing = [c for c in checked if c.is_match]
         if not passing:
             return None
-        return max(passing, key=lambda c: (c.candidate.is_social, c.similarity))
+
+        wanted = (prefer_platform or "").strip().lower()
+
+        def sort_key(item: VerifiedCandidate):
+            is_preferred = bool(wanted) and item.candidate.platform.lower() == wanted
+            return (not is_preferred, item.candidate.tier, -item.similarity)
+
+        return min(passing, key=sort_key)

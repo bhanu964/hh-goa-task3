@@ -61,6 +61,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="how many candidate pages to download and face-check (default: 12)",
     )
     parser.add_argument(
+        "--prefer-platform",
+        metavar="NAME",
+        help=(
+            "prefer this platform when several candidates pass the face check "
+            "(e.g. Instagram). Only reorders verified matches — it cannot make "
+            "a non-matching page into a match"
+        ),
+    )
+    parser.add_argument(
         "--no-exact-matches",
         action="store_true",
         help="skip the extra exact_matches query (saves one SerpApi credit)",
@@ -80,6 +89,7 @@ def main(argv: list[str] | None = None) -> int:
     threshold = args.threshold if args.threshold is not None else config.face.match_threshold
     max_checks = args.max_checks if args.max_checks is not None else config.search.max_face_checks
     network = (args.network or config.chain.network).strip().lower()
+    prefer_platform = args.prefer_platform or os.getenv("PREFER_PLATFORM") or None
     fetch_exact = (
         not args.no_exact_matches
         and os.getenv("SERPAPI_FETCH_EXACT", "true").strip().lower() != "false"
@@ -176,6 +186,8 @@ def main(argv: list[str] | None = None) -> int:
     # ---------------------------------------------------------------- 4/7 + 5/7
     console.step(4, TOTAL_STEPS, "Inspecting candidates for a real match…")
     console.info(f"Checking up to {max_checks} candidates, social-media pages first")
+    if prefer_platform:
+        console.info(f"Preferring {prefer_platform} among candidates that pass the face check")
 
     selector = CandidateSelector(
         encoder=encoder,
@@ -183,6 +195,7 @@ def main(argv: list[str] | None = None) -> int:
         download_timeout=config.search.download_timeout,
         max_download_bytes=config.search.max_download_bytes,
         max_checks=max_checks,
+        prefer_platform=prefer_platform,
     )
 
     def on_progress(candidate, verified, status):
@@ -217,7 +230,25 @@ def main(argv: list[str] | None = None) -> int:
         )
         return EXIT_NO_MATCH
 
+    if report.matches:
+        print()
+        console.info("All face-verified matches, strongest first per platform:")
+        for verified_match in sorted(
+            report.matches, key=lambda c: (c.candidate.tier, -c.similarity)
+        ):
+            console.detail(
+                verified_match.candidate.platform,
+                f"cos={verified_match.similarity:+.4f}  "
+                f"{console.truncate(verified_match.candidate.link, 52)}",
+            )
+        print()
+
     console.ok("Candidate confirmed by face comparison")
+    console.info(
+        f"Selected by preference for {prefer_platform}, then similarity."
+        if prefer_platform and best.candidate.platform.lower() == prefer_platform.lower()
+        else "Selected by platform priority (personal posts before aggregators), then similarity."
+    )
     console.detail("platform", best.candidate.platform)
     console.detail("url", best.candidate.link)
     console.detail("title", console.truncate(best.candidate.title))

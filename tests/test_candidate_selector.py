@@ -118,3 +118,96 @@ def test_verified_candidate_serialises_its_evidence():
     assert payload["similarity"] == 0.77
     assert payload["threshold"] == 0.45
     assert payload["candidate"]["platform"] == "Instagram"
+
+
+def test_instagram_is_preferred_over_a_higher_scoring_reddit_result():
+    """A personal post outranks an aggregator even on a lower score.
+
+    Reddit serves full-resolution images while Instagram only exposes a ~250px
+    thumbnail, so Reddit reliably scores higher. Tier ordering stops that
+    resolution artefact from deciding what the pipeline reports.
+    """
+    checked = [
+        verified("https://www.reddit.com/r/x/comments/1/", "Reddit", True, 0.98),
+        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.71),
+    ]
+    best = CandidateSelector.select_best(checked)
+    assert best.candidate.platform == "Instagram"
+
+
+def test_youtube_does_not_outrank_facebook():
+    checked = [
+        verified("https://www.youtube.com/watch?v=1", "YouTube", True, 0.95),
+        verified("https://www.facebook.com/a/posts/1/", "Facebook", True, 0.66),
+    ]
+    assert CandidateSelector.select_best(checked).candidate.platform == "Facebook"
+
+
+def test_similarity_still_decides_within_the_primary_tier():
+    checked = [
+        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.61),
+        verified("https://www.facebook.com/a/posts/1/", "Facebook", True, 0.88),
+        verified("https://x.com/a/status/1", "X (Twitter)", True, 0.74),
+    ]
+    assert CandidateSelector.select_best(checked).similarity == 0.88
+
+
+def test_reddit_is_still_selected_when_no_primary_social_passes():
+    checked = [
+        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.20),
+        verified("https://www.reddit.com/r/x/comments/1/", "Reddit", True, 0.91),
+    ]
+    assert CandidateSelector.select_best(checked).candidate.platform == "Reddit"
+
+
+def test_tier_order_is_primary_then_other_social_then_the_rest():
+    checked = [
+        verified("https://news.example.com/a", "news.example.com", False, 0.99),
+        verified("https://www.reddit.com/r/x/comments/1/", "Reddit", True, 0.97),
+        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.55),
+    ]
+    assert CandidateSelector.select_best(checked).candidate.platform == "Instagram"
+
+
+def test_preferred_platform_wins_over_a_higher_score():
+    checked = [
+        verified("https://www.facebook.com/a/posts/1/", "Facebook", True, 0.90),
+        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.66),
+    ]
+    best = CandidateSelector.select_best(checked, prefer_platform="Instagram")
+    assert best.candidate.platform == "Instagram"
+
+
+def test_platform_preference_is_case_insensitive():
+    checked = [
+        verified("https://www.facebook.com/a/posts/1/", "Facebook", True, 0.90),
+        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.66),
+    ]
+    assert (
+        CandidateSelector.select_best(checked, prefer_platform="instagram")
+        .candidate.platform
+        == "Instagram"
+    )
+
+
+def test_preference_falls_back_when_that_platform_has_no_passing_match():
+    checked = [
+        verified("https://www.facebook.com/a/posts/1/", "Facebook", True, 0.90),
+        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.11),
+    ]
+    best = CandidateSelector.select_best(checked, prefer_platform="Instagram")
+    assert best.candidate.platform == "Facebook"
+
+
+def test_preference_cannot_promote_a_failing_candidate():
+    """The preference reorders verified matches; it never creates one."""
+    checked = [verified("https://www.instagram.com/p/A/", "Instagram", True, 0.10)]
+    assert CandidateSelector.select_best(checked, prefer_platform="Instagram") is None
+
+
+def test_no_preference_keeps_the_default_tier_ordering():
+    checked = [
+        verified("https://www.reddit.com/r/x/comments/1/", "Reddit", True, 0.98),
+        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.71),
+    ]
+    assert CandidateSelector.select_best(checked, None).candidate.platform == "Instagram"

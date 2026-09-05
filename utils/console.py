@@ -60,6 +60,8 @@ def working(message: str) -> None:
 
 
 def detail(label: str, value: str) -> None:
+    # Long domain labels would otherwise push the value column out of line.
+    label = label if len(label) <= 18 else label[:17] + "…"
     print(f"    {_DIM}{label:<18}{_RESET} {value}")
 
 

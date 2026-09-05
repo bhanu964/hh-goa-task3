@@ -195,6 +195,7 @@ gitignored; `.env.example` documents every variable.
 | `SERPAPI_FETCH_EXACT` | `true` | Also query `exact_matches`. Strongest evidence; costs one extra credit per run |
 | `FACE_MATCH_THRESHOLD` | `0.45` | Cosine similarity required to accept a candidate |
 | `MAX_FACE_CHECKS` | `12` | How many candidate pages to download and face-check |
+| `PREFER_PLATFORM` | — | Prefer this platform among verified matches, e.g. `Instagram`. Also `--prefer-platform` |
 | `BLOCKCHAIN_NETWORK` | `memory` | `sepolia`, `local`, or `memory` |
 | `SEPOLIA_RPC_URL` | public node | Any Sepolia JSON-RPC endpoint |
 | `LOCAL_RPC_URL` | `http://127.0.0.1:8545` | Anvil / Hardhat / Ganache |
@@ -223,6 +224,9 @@ python main.py --image input/selfie.jpg --network sepolia
 # Also demonstrate that tampering with the record breaks verification
 python main.py --image input/selfie.jpg --demo-tamper
 
+# Prefer a particular platform among the candidates that pass the face check
+python main.py --image input/selfie.jpg --prefer-platform Instagram
+
 # Stricter face matching
 python main.py --image input/selfie.jpg --threshold 0.60
 
@@ -240,7 +244,8 @@ python main.py --image input/selfie.jpg --no-exact-matches
 
 ## Sample run
 
-Abridged real output (`--network memory --demo-tamper`):
+Abridged real output
+(`--prefer-platform Instagram --network memory --demo-tamper`):
 
 ```
 [1/7] Loading image…
@@ -252,29 +257,40 @@ Abridged real output (`--network memory --demo-tamper`):
   ✓ Face embedding generated (512-d ArcFace vector)
 
 [3/7] Performing genuine reverse-image search…
-    SerpApi quota      248 searches left (Free Plan)
+    SerpApi quota      241 searches left (Free Plan)
   ⟳ Uploading image to SerpApi and querying Google Lens…
   ✓ Live search completed — results generated at runtime
     queries            all, exact_matches
-    search id          6a9bb04777e3d9f28db1a922
-  ✓ 447 candidate pages returned
-    social-media hits  11
+    search id          6a9bb37d1f758aba4b29186a
+  ✓ 65 candidate pages returned
+    social-media hits  10
 
 [5/7] Verifying faces against the input embedding…
-  ✓ Instagram      https://www.instagram.com/reel/DcjHTDJhMt0/     cos=+0.8167  MATCH
   ✓ Facebook       https://www.facebook.com/reallyamerican/posts…  cos=+0.8984  MATCH
+  ✓ Instagram      https://www.instagram.com/reel/DcjHTDJhMt0/     cos=+0.8167  MATCH
+  ✓ Instagram      https://www.instagram.com/p/Dc5KuZdDZiX/        cos=+0.7646  MATCH
   ✓ Threads        https://www.threads.com/@paparazzi_playground…  cos=+0.6855  MATCH
-  ✓ Reddit         https://www.reddit.com/r/Presidents/comments/…  cos=+0.9879  MATCH
+  ✓ Reddit         https://www.reddit.com/r/Presidents/comments/…  cos=+0.9790  MATCH
   · YouTube        https://www.youtube.com/watch?v=_jxSpQiknyQ     cos=-0.1033  below threshold
 
-    faces compared     11
-    passed threshold   9
+    faces compared     12
+    passed threshold   10
+
+  · All face-verified matches, strongest first per platform:
+    Instagram          cos=+0.8167  https://www.instagram.com/reel/DcjHTDJhMt0/
+    Facebook           cos=+0.8984  https://www.facebook.com/reallyamerican/posts/today…
+    Reddit             cos=+0.9790  https://www.reddit.com/r/Presidents/comments/14zwz9…
+
   ✓ Candidate confirmed by face comparison
-    similarity         0.9879 cosine  (threshold 0.45)
+  · Selected by preference for Instagram, then similarity.
+    platform           Instagram
+    url                https://www.instagram.com/reel/DcjHTDJhMt0/
+    title              On This Day | Barack Obama Makes History On 27 August 2008 ...
+    similarity         0.8167 cosine  (threshold 0.45)
 
 [6/7] Creating integrity fingerprint…
     SHA-256:
-    8baa4f6cce5ba66ee8977838f7f7e13deda30874d5bb18945746e8dd060378f4
+    467cbf0b0dad5bae3c2c96445f4dca0f91c82dccc56e6b9ea76b602966dda9b4
 
 [7/7] Anchoring on blockchain and re-verifying…
   ✓ Transaction confirmed
@@ -282,10 +298,10 @@ Abridged real output (`--network memory --demo-tamper`):
     gas used           90758
 
     Local fingerprint  (recomputed from the saved record):
-    8baa4f6cce5ba66ee8977838f7f7e13deda30874d5bb18945746e8dd060378f4
+    467cbf0b0dad5bae3c2c96445f4dca0f91c82dccc56e6b9ea76b602966dda9b4
 
     Blockchain fingerprint (read from the contract):
-    8baa4f6cce5ba66ee8977838f7f7e13deda30874d5bb18945746e8dd060378f4
+    467cbf0b0dad5bae3c2c96445f4dca0f91c82dccc56e6b9ea76b602966dda9b4
 
 ==============================================================
                    FINAL RESULT: VERIFIED ✓
@@ -377,11 +393,25 @@ wide, unambiguous margin. Configure it with `FACE_MATCH_THRESHOLD` or
 evidence record, so anyone verifying later can see the criterion the decision
 was made under.
 
-**Selection policy.** Among candidates that pass, social-media pages are
-preferred (that is what the task asks for) and similarity decides within each
-group. A candidate below threshold is never selected, however highly the search
-engine ranked it. If nothing passes, the pipeline reports
-`No candidate passed the face-match threshold` and exits 2.
+**Selection policy.** Among candidates that pass the threshold, the order is:
+
+1. `--prefer-platform`, if given and something from that platform passed.
+2. **Platform tier.** Personal-post platforms (Instagram, Facebook, X,
+   LinkedIn, TikTok, Threads) outrank aggregators and video sites (Reddit,
+   YouTube, Pinterest), which in turn outrank everything else.
+3. **Similarity**, within a tier.
+
+The tier step exists because of a resolution artefact rather than any
+editorial preference: Reddit serves a full-resolution image while Instagram
+exposes only a ~250 px thumbnail, so Reddit reliably scores higher on the same
+person. Without tiering, that download-quality difference — not the evidence —
+would decide what the pipeline reports.
+
+Every one of these steps only *orders candidates that already passed the face
+check*. None of them can turn a non-matching page into a match: if nothing
+clears the threshold the pipeline reports
+`No candidate passed the face-match threshold` and exits 2, whatever platform
+was requested.
 
 The displayed "match strength" percentage is `(cosine + 1) / 2 × 100`, purely
 so the printed figure is never negative. Every decision uses the raw cosine
@@ -526,14 +556,14 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-64 unit tests, covering the deterministic components:
+78 unit tests, covering the deterministic components:
 
 | File | Covers |
 | :--- | :--- |
 | `test_hashing.py` | Canonical JSON, digest stability, float precision, sensitivity to every field, save/load round trip |
 | `test_face_matching.py` | Cosine similarity maths, symmetry, scale invariance, range, threshold boundary, error cases |
 | `test_result_parser.py` | Platform tagging, de-duplication, exclusion of search-engine internals, malformed input, ranking |
-| `test_candidate_selector.py` | Selection policy — including that a top-ranked result failing the face check is not selected |
+| `test_candidate_selector.py` | Selection policy — platform tiering, preference handling, and that a top-ranked result failing the face check is never selected |
 | `test_blockchain.py` | Deploy, anchor, read back, verify, tamper detection, reverts — against a real in-process EVM, no mocks |
 
 ### Live search test
@@ -593,7 +623,7 @@ hh-goa-task3/
 │   └── new_wallet.py            # generate a testnet burner wallet
 │
 ├── utils/console.py             # terminal output for the screen recording
-├── tests/                       # 64 unit tests + live search integration test
+├── tests/                       # 78 unit tests + live search integration test
 ├── input/selfie.jpg             # public-domain sample (see ATTRIBUTION.md)
 └── output/                      # evidence_record.json written here
 ```

@@ -63,6 +63,34 @@ def is_excluded(url: str) -> bool:
     return any(fragment in lowered for fragment in EXCLUDED_HOSTS)
 
 
+# Selection priority. Tier 0 is what the task actually asks for — personal
+# social-media posts. Tier 1 platforms are social but are aggregators or
+# video sites, where a "match" is more often a news still or a reaction video
+# than a post about the person. Tier 2 is everything else.
+PRIMARY_SOCIAL = {
+    "Instagram",
+    "Facebook",
+    "X (Twitter)",
+    "LinkedIn",
+    "TikTok",
+    "Threads",
+    "Snapchat",
+    "Bluesky",
+    "Mastodon",
+}
+
+TIER_PRIMARY_SOCIAL = 0
+TIER_OTHER_SOCIAL = 1
+TIER_NON_SOCIAL = 2
+
+
+def platform_tier(platform: str, is_social: bool) -> int:
+    """Rank a platform for selection purposes."""
+    if platform in PRIMARY_SOCIAL:
+        return TIER_PRIMARY_SOCIAL
+    return TIER_OTHER_SOCIAL if is_social else TIER_NON_SOCIAL
+
+
 def platform_for_url(url: str) -> tuple[str, bool]:
     """Map a URL to ``(platform_name, is_social_media)``.
 
@@ -97,6 +125,11 @@ class Candidate:
     thumbnail_url: str | None = None
 
     @property
+    def tier(self) -> int:
+        """Selection priority — lower wins. See :func:`platform_tier`."""
+        return platform_tier(self.platform, self.is_social)
+
+    @property
     def best_image_url(self) -> str | None:
         """Full image first; the thumbnail is the fallback.
 
@@ -114,6 +147,7 @@ class Candidate:
             "source": self.source,
             "platform": self.platform,
             "is_social": self.is_social,
+            "tier": self.tier,
             "section": self.section,
             "image_url": self.image_url,
             "thumbnail_url": self.thumbnail_url,
@@ -175,15 +209,16 @@ def parse_lens_response(payload: dict[str, Any]) -> list[Candidate]:
 def rank_candidates(candidates: list[Candidate]) -> list[Candidate]:
     """Order candidates by how promising they are to check first.
 
-    Social-media pages lead because they are what the task asks for, exact
-    matches outrank visual ones, and Lens position breaks the tie. This only
-    sets inspection *order* — nothing here decides a match.
+    Primary social platforms lead because personal posts are what the task
+    asks for, then other social sites, then everything else; exact matches
+    outrank visual ones and Lens position breaks the tie. This only sets
+    inspection *order* — nothing here decides a match.
     """
     section_rank = {name: i for i, name in enumerate(RESULT_SECTIONS)}
     return sorted(
         candidates,
         key=lambda c: (
-            not c.is_social,
+            c.tier,
             section_rank.get(c.section, len(RESULT_SECTIONS)),
             c.position,
         ),
