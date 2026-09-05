@@ -10,7 +10,6 @@ see README for the pretrained-model licence note).
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -142,11 +141,3 @@ class FaceDetector:
         if not faces:
             raise FaceDetectionError("No face detected in the image")
         return faces[0], len(faces)
-
-
-def default_detector_from_env() -> FaceDetector:
-    return FaceDetector(
-        model_pack=os.getenv("FACE_MODEL_PACK", "buffalo_l"),
-        det_size=int(os.getenv("FACE_DET_SIZE", "640")),
-        det_threshold=float(os.getenv("FACE_DET_THRESHOLD", "0.5")),
-    )
