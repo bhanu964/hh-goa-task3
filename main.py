@@ -44,7 +44,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "  python main.py --image input/selfie.jpg --demo-tamper\n"
         ),
     )
-    parser.add_argument("--image", required=True, help="path to the input face image")
+    parser.add_argument(
+        "--image",
+        required=True,
+        metavar="PATH",
+        help=(
+            "path to the input face image — .jpg, .jpeg, .png, .webp, .bmp, "
+            ".tif/.tiff or .gif (format is detected from the file's contents, "
+            "not its extension). ~ and quoted paths are accepted"
+        ),
+    )
     parser.add_argument(
         "--network",
         choices=["sepolia", "local", "memory"],
@@ -102,6 +111,8 @@ def main(argv: list[str] | None = None) -> int:
     # dependency surfaces as a clean message rather than an import traceback.
     from face.detector import FaceDetectionError, FaceDetector
     from face.encoder import FaceEncoder
+    from utils.imaging import ImageError
+    from utils.imaging import load_image as load_input_image
     from integrity.hashing import build_record, sha256_file
     from search.candidate_selector import CandidateSelector
     from search.result_parser import parse_lens_response
@@ -109,13 +120,17 @@ def main(argv: list[str] | None = None) -> int:
 
     # ---------------------------------------------------------------- 1/7
     console.step(1, TOTAL_STEPS, "Loading image…")
-    image_path = Path(args.image)
-    if not image_path.exists():
-        console.fail(f"Image not found: {image_path}")
+    try:
+        loaded = load_input_image(args.image)
+    except ImageError as exc:
+        console.fail(str(exc))
         return EXIT_ERROR
+
+    image_path = loaded.path
     query_image_sha256 = sha256_file(image_path)
     console.ok(str(image_path))
-    console.detail("size", f"{image_path.stat().st_size / 1024:.0f} KB")
+    console.detail("format", f"{loaded.image_format}  ({loaded.width}x{loaded.height})")
+    console.detail("size", f"{loaded.size_bytes / 1024:.0f} KB")
     console.detail("sha256", query_image_sha256)
 
     # ---------------------------------------------------------------- 2/7
@@ -128,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
     encoder = FaceEncoder(detector)
     console.working("Loading InsightFace models (first run downloads ~280 MB)…")
     try:
-        reference_face, face_count = encoder.encode_file(image_path)
+        reference_face, face_count = encoder.encode_loaded(loaded)
     except FaceDetectionError as exc:
         console.fail(str(exc))
         return EXIT_ERROR
@@ -165,7 +180,9 @@ def main(argv: list[str] | None = None) -> int:
 
     console.working("Uploading image to SerpApi and querying Google Lens…")
     try:
-        search_result = client.search_local_image(image_path, include_exact_matches=fetch_exact)
+        search_result = client.search_local_image(
+            image_path, include_exact_matches=fetch_exact, loaded=loaded
+        )
     except SearchError as exc:
         console.fail(str(exc))
         return EXIT_ERROR

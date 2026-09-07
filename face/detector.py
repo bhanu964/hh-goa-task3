@@ -13,8 +13,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import cv2
 import numpy as np
+
+from utils.imaging import ImageError, LoadedImage
+from utils.imaging import decode_bytes as _decode_bytes
+from utils.imaging import load_image as _load_image
 
 
 class FaceDetectionError(Exception):
@@ -40,29 +43,25 @@ class DetectedFace:
 
 
 def load_image(path: str | Path) -> np.ndarray:
-    """Read an image from disk into a BGR array, with clear errors."""
-    path = Path(path)
-    if not path.exists():
-        raise FaceDetectionError(f"Image not found: {path}")
-    if not path.is_file():
-        raise FaceDetectionError(f"Not a file: {path}")
-    if path.stat().st_size == 0:
-        raise FaceDetectionError(f"Image is empty: {path}")
+    """Read an image from disk into a BGR array.
 
-    image = cv2.imread(str(path), cv2.IMREAD_COLOR)
-    if image is None:
-        raise FaceDetectionError(
-            f"Could not decode {path} — is it a valid JPG/PNG/WebP image?"
-        )
-    return image
+    Accepts JPG/JPEG, PNG, WebP, BMP, TIFF and GIF, identified by content
+    rather than by file extension. See :mod:`utils.imaging`.
+    """
+    return load_input(path).bgr
+
+
+def load_input(path: str | Path) -> LoadedImage:
+    """Read an input image along with its raw bytes and detected format."""
+    try:
+        return _load_image(path)
+    except ImageError as exc:
+        raise FaceDetectionError(str(exc)) from exc
 
 
 def decode_image(data: bytes) -> np.ndarray | None:
     """Decode raw image bytes to BGR. Returns None if the bytes aren't an image."""
-    if not data:
-        return None
-    buffer = np.frombuffer(data, dtype=np.uint8)
-    return cv2.imdecode(buffer, cv2.IMREAD_COLOR)
+    return _decode_bytes(data)
 
 
 class FaceDetector:

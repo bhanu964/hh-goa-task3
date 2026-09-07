@@ -15,7 +15,15 @@ from pathlib import Path
 
 import numpy as np
 
-from .detector import DetectedFace, FaceDetectionError, FaceDetector, decode_image, load_image
+from utils.imaging import LoadedImage
+
+from .detector import (
+    DetectedFace,
+    FaceDetectionError,
+    FaceDetector,
+    decode_image,
+    load_input,
+)
 
 
 class FaceEncoder:
@@ -29,10 +37,21 @@ class FaceEncoder:
     def encode_file(self, path: str | Path) -> tuple[DetectedFace, int]:
         """Encode the primary (largest) face in an image file.
 
+        Accepts any format :mod:`utils.imaging` supports — .jpg, .jpeg, .png,
+        .webp, .bmp, .tiff, .gif — identified by content rather than extension.
+
         Returns the face and the total number of faces detected.
         """
-        image = load_image(path)
-        return self.detector.detect_primary(image)
+        return self.encode_loaded(load_input(path))
+
+    def encode_loaded(self, loaded: LoadedImage) -> tuple[DetectedFace, int]:
+        """Encode the primary face in an already-read image.
+
+        Detection runs on ``for_detection()``, which downscales very large
+        photos so a 40-megapixel input does not blow up memory. The full-size
+        original is kept for hashing and upload.
+        """
+        return self.detector.detect_primary(loaded.for_detection())
 
     def encode_bytes(self, data: bytes) -> DetectedFace | None:
         """Encode the primary face in raw image bytes.

@@ -215,6 +215,34 @@ One command runs the whole pipeline:
 python main.py --image input/selfie.jpg
 ```
 
+### Input images
+
+Accepts **`.jpg`, `.jpeg`, `.png`, `.webp`, `.bmp`, `.tif`/`.tiff`, `.gif`**, in
+any capitalisation. The format is detected from the file's *contents*, not its
+extension, so a PNG that someone saved as `photo.jpg` still works — and is
+re-encoded correctly before upload rather than being rejected by the search API.
+
+Paths are handled the way people actually paste them:
+
+```bash
+python main.py --image ~/Pictures/me.jpeg          # ~ is expanded
+python main.py --image "~/My Photos/holiday.JPG"   # spaces, any case
+python main.py --image '/tmp/照片.jpeg'             # non-ASCII names
+```
+
+EXIF orientation is applied, so a portrait photo from a phone is read upright
+rather than sideways. Very large images are downscaled for detection only — the
+full-resolution original is what gets hashed and uploaded.
+
+**HEIC/HEIF and AVIF are not supported.** These are the iPhone default, so the
+error says exactly how to convert:
+
+```
+✗ HEIF images (the iPhone default) are not supported. Convert to JPEG first:
+    macOS:  sips -s format jpeg 'IMG_0001.heic' --out 'IMG_0001.jpg'
+    other:  pip install pillow-heif, or export the photo as JPEG
+```
+
 Options:
 
 ```bash
@@ -589,12 +617,14 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-125 unit tests, covering the deterministic components:
+173 unit tests, covering the deterministic components:
 
 | File | Covers |
 | :--- | :--- |
 | `test_hashing.py` | Canonical JSON, digest stability, float precision, sensitivity to every field, save/load round trip |
 | `test_face_matching.py` | Cosine similarity maths, symmetry, scale invariance, range, threshold boundary, error cases |
+| `test_imaging.py` | Format detection by magic bytes, `.jpg`/`.jpeg` spellings, content-over-extension, tilde/quote/unicode paths, HEIC guidance, downscaling |
+| `test_face_encoder.py` | Image-loading to detection wiring, including that `encode_file` and `encode_loaded` agree |
 | `test_result_parser.py` | Platform tagging and tiering, URL normalisation, URL + image de-duplication, exclusion of search-engine internals, malformed input, ranking |
 | `test_candidate_selector.py` | Selection policy — tier order, X/Web preference aliases, and that a top-ranked result failing the face check is never selected |
 | `test_blockchain.py` | Deploy, anchor, read back, verify, tamper detection, reverts — against a real in-process EVM, no mocks |
@@ -655,8 +685,10 @@ hh-goa-task3/
 │   ├── compile_contract.py      # regenerate the artifact
 │   └── new_wallet.py            # generate a testnet burner wallet
 │
-├── utils/console.py             # terminal output for the screen recording
-├── tests/                       # 125 unit tests + live search integration test
+├── utils/
+│   ├── console.py               # terminal output for the screen recording
+│   └── imaging.py               # robust image input: formats, paths, EXIF
+├── tests/                       # 173 unit tests + live search integration test
 ├── input/selfie.jpg             # public-domain sample (see ATTRIBUTION.md)
 └── output/                      # evidence_record.json written here
 ```
@@ -718,6 +750,12 @@ Being honest about what this does and does not prove:
   garbage on-chain.
 - Public RPC endpoints can rate-limit; a dedicated Alchemy/Infura URL is more
   reliable for repeated runs.
+
+**Input images**
+- HEIC/HEIF and AVIF are not decoded. The error explains how to convert, but an
+  iPhone photo will not work straight off the device unless Live Photo capture
+  is set to "Most Compatible" or it is exported as JPEG.
+- Animated GIFs and multi-page TIFFs are read as their first frame only.
 
 **Ethical use**
 - Reverse-image-searching a face is a surveillance-adjacent capability. This is

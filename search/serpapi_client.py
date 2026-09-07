@@ -24,10 +24,15 @@ from typing import Any
 import cv2
 import serpapi
 
+from utils.imaging import UPLOAD_FORMATS, ImageError, LoadedImage
+from utils.imaging import load_image as load_input_image
+
 # SerpApi's /image endpoint rejects uploads above this size.
 MAX_UPLOAD_BYTES = 500 * 1024
 
-SUPPORTED_UPLOAD_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+# SerpApi's /image endpoint accepts JPEG, PNG and WebP. Anything else is
+# re-encoded to JPEG before upload.
+SUPPORTED_UPLOAD_FORMATS = set(UPLOAD_FORMATS)
 
 
 class SearchError(Exception):
@@ -55,30 +60,37 @@ class LensSearchResult:
         return self.search_metadata.get("google_lens_url")
 
 
-def prepare_upload_copy(path: str | Path, max_bytes: int = MAX_UPLOAD_BYTES) -> tuple[Path, bool]:
+def prepare_upload_copy(
+    path: str | Path,
+    max_bytes: int = MAX_UPLOAD_BYTES,
+    loaded: LoadedImage | None = None,
+) -> tuple[Path, bool]:
     """Return a path that satisfies SerpApi's upload constraints.
 
-    The original file is used untouched when it is already an accepted format
-    and within the size cap. Otherwise a temporary JPEG copy is produced by
-    stepping quality down and then scale, which keeps the face detail that the
-    search actually depends on.
+    The original file is used untouched when its *actual* format (sniffed from
+    the file's bytes, not its extension) is one SerpApi accepts and it is within
+    the size cap. Otherwise a temporary JPEG copy is produced by stepping
+    quality down and then scale, preserving the face detail the search depends
+    on.
+
+    Deciding on content rather than extension matters: a PNG or BMP saved as
+    ``photo.jpg`` would otherwise be uploaded as-is and rejected by the API.
 
     Returns ``(path, is_temporary)``.
     """
     path = Path(path)
-    if not path.exists():
-        raise SearchError(f"Image not found: {path}")
 
-    within_size = path.stat().st_size <= max_bytes
-    supported = path.suffix.lower() in SUPPORTED_UPLOAD_SUFFIXES
-    if within_size and supported:
-        return path, False
+    if loaded is None:
+        try:
+            loaded = load_input_image(path)
+        except ImageError as exc:
+            raise SearchError(str(exc)) from exc
 
-    image = cv2.imread(str(path), cv2.IMREAD_COLOR)
-    if image is None:
-        raise SearchError(f"Could not decode {path} for upload")
+    if loaded.image_format in SUPPORTED_UPLOAD_FORMATS and loaded.size_bytes <= max_bytes:
+        return loaded.path, False
 
     tmp = Path(tempfile.mkstemp(prefix="hhgoa_lens_", suffix=".jpg")[1])
+    image = loaded.bgr
 
     for scale in (1.0, 0.85, 0.7, 0.55, 0.4, 0.3):
         resized = image
@@ -172,6 +184,7 @@ class SerpApiLensClient:
         self,
         image_path: str | Path,
         include_exact_matches: bool = True,
+        loaded: LoadedImage | None = None,
     ) -> LensSearchResult:
         """Upload a local image and collect Google Lens results for it.
 
@@ -180,7 +193,7 @@ class SerpApiLensClient:
         very same image is merged in — those are the strongest evidence, at the
         cost of one extra API credit.
         """
-        upload_path, is_temp = prepare_upload_copy(image_path)
+        upload_path, is_temp = prepare_upload_copy(image_path, loaded=loaded)
         try:
             image_id = self.upload(upload_path)
         finally:
