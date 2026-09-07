@@ -27,6 +27,9 @@ python main.py --image input/sample.jpg
 # Recording demo — full chain plus tamper proof
 python main.py --image input/sample.jpg --demo-tamper
 
+# Paced walkthrough for a screen recording (pauses between stages)
+./scripts/demo.sh
+
 # Public testnet (needs a funded wallet) — gives an Etherscan link
 python main.py --image input/sample.jpg --network sepolia
 
