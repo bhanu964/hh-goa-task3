@@ -1,0 +1,32 @@
+# Render blueprint — https://render.com/docs/blueprint-spec
+#
+# NOTE ON PLAN: this pipeline loads InsightFace RetinaFace + ArcFace models.
+# Measured peak resident memory is roughly 600-900 MB, so it does NOT fit
+# Render's 512 MB Free or Starter instances — it will be OOM-killed on model
+# load. `standard` (2 GB) is the smallest plan that works. See DEPLOYMENT.md.
+services:
+  - type: web
+    name: hh-goa-task3
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard          # 2 GB RAM. free/starter (512 MB) will be OOM-killed.
+    region: oregon
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: SERPAPI_API_KEY
+        sync: false         # set this in the Render dashboard, never in git
+      - key: BLOCKCHAIN_NETWORK
+        value: memory       # in-process EVM; no wallet or faucet needed
+      - key: PREFER_PLATFORM
+        value: X (Twitter)
+      - key: FACE_MATCH_THRESHOLD
+        value: "0.45"
+      - key: MAX_FACE_CHECKS
+        value: "8"          # lower than the CLI default to keep requests brisk
+      - key: INSIGHTFACE_HOME
+        value: /opt/insightface
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: PYTHON_VERSION
+        value: "3.13"

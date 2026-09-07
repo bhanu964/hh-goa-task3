@@ -36,6 +36,22 @@ success it did not achieve.
 | **[COMPLETE_SETUP_GUIDE.md](COMPLETE_SETUP_GUIDE.md)** | Step-by-step setup from a clean machine, Sepolia funding, troubleshooting |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Module design, key decisions, and what the system proves — and does not |
 | **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** | Requirement-by-requirement map, reference-repo verdicts, verification log |
+| **[DEPLOYMENT.md](DEPLOYMENT.md)** | Optional web UI: hosting, the measured memory floor, Docker, Render blueprint |
+
+### Optional web UI
+
+A browser front-end is included — upload a face, watch every stage stream live,
+see the on-chain verification and the tamper check. It is **not required by the
+task**; the CLI is the deliverable.
+
+```bash
+pip install -r requirements-web.txt
+uvicorn webapp.app:app --port 8000     # http://127.0.0.1:8000
+```
+
+It needs **≥ 1 GB RAM** — measured, not estimated: a 512 MB container is
+OOM-killed while loading the face models. See
+[DEPLOYMENT.md](DEPLOYMENT.md) for the numbers and hosting options.
 
 ---
 

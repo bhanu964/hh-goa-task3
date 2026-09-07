@@ -1,0 +1,6 @@
+# Web front-end — adds to the pipeline's own dependencies.
+-r requirements.txt
+
+fastapi==0.121.3
+uvicorn[standard]==0.52.4
+python-multipart==0.0.20
