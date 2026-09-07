@@ -5,7 +5,7 @@
 [![tests](https://github.com/bhanu964/hh-goa-task3/actions/workflows/tests.yml/badge.svg)](https://github.com/bhanu964/hh-goa-task3/actions/workflows/tests.yml)
 [![python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 [![licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
-[![tests count](https://img.shields.io/badge/tests-202%20unit%20%2B%207%20live-brightgreen)](tests/)
+[![tests count](https://img.shields.io/badge/tests-203%20unit%20%2B%207%20live-brightgreen)](tests/)
 
 A command-line pipeline that takes a face image, finds a real matching post on
 the public web through a genuine reverse-image search, proves the face in that
@@ -687,7 +687,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-202 unit tests, covering the deterministic components:
+203 unit tests, covering the deterministic components:
 
 | File | Covers |
 | :--- | :--- |
@@ -758,7 +758,7 @@ hh-goa-task3/
 ├── utils/
 │   ├── console.py               # terminal output for the screen recording
 │   └── imaging.py               # robust image input: formats, paths, EXIF
-├── tests/                       # 202 unit tests + live search integration test
+├── tests/                       # 203 unit tests + live search integration test
 ├── input/sample.jpg             # public-domain sample (see ATTRIBUTION.md)
 └── output/                      # evidence_record.json written here
 ```

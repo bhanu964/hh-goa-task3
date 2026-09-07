@@ -16,7 +16,7 @@ which decisions were made and why, and what this system honestly cannot do.
 | **Stack** | InsightFace (ArcFace) · SerpApi → Google Lens · `hashlib` · web3.py → Ethereum |
 | **Runtime dependencies** | 12 direct |
 | **Application code** | ~2255 non-blank lines across 19 modules |
-| **Tests** | 202 unit + 7 live integration |
+| **Tests** | 203 unit + 7 live integration |
 | **Smart contract** | `FaceEvidenceRegistry.sol`, Solidity 0.8.24, 928 bytes compiled |
 | **Networks supported** | Ethereum Sepolia · local JSON-RPC node · in-process py-evm |
 | **Browser automation** | None. No Playwright, no Selenium, no scraping, no CAPTCHA |
@@ -224,7 +224,7 @@ failures.
 
 ## 5. Testing
 
-209 tests: 202 offline (~1.5 s, no network, no model weights) plus 7 live.
+210 tests: 203 offline (~1.5 s, no network, no model weights) plus 7 live.
 
 | File | Tests | Covers |
 | :--- | ---: | :--- |
@@ -315,7 +315,7 @@ hh-goa-task3/
 ├── contracts/     FaceEvidenceRegistry.sol
 ├── scripts/       compile_contract.py · new_wallet.py
 ├── utils/         console.py · imaging.py
-├── tests/         202 unit + 7 live integration
+├── tests/         203 unit + 7 live integration
 │
 ├── input/sample.jpg             # public-domain, attributed
 ├── README.md · ARCHITECTURE.md · COMPLETE_SETUP_GUIDE.md

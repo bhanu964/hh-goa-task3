@@ -104,7 +104,7 @@ dim "  \$ pytest -q"
 echo
 $PY -m pytest -q 2>&1 | tail -3
 echo
-dim "  202 offline tests. The blockchain tests deploy the real contract to a"
+dim "  203 offline tests. The blockchain tests deploy the real contract to a"
 dim "  real in-process EVM — no mocks. The search has a live integration test."
 pause
 

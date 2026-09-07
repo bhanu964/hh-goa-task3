@@ -339,7 +339,7 @@ hide real failures.
 
 ## 9. Testing strategy
 
-209 tests. The split is deliberate:
+210 tests. The split is deliberate:
 
 **Deterministic logic is unit-tested** — hashing, similarity maths, parsing,
 tiering, de-duplication, selection policy. These run in ~1.5 s with no network

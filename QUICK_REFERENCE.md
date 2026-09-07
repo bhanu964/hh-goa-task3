@@ -48,7 +48,7 @@ python main.py --image input/sample.jpg --max-checks 20
 python main.py --image input/sample.jpg --no-exact-matches
 
 # Tests
-pytest -q                                        # 202 offline
+pytest -q                                        # 203 offline
 RUN_LIVE_SEARCH=1 pytest tests/test_search_live.py -v   # 7 live
 
 # Helpers

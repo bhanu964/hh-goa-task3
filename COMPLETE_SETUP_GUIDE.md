@@ -132,7 +132,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-209 tests. The 7 live-search tests are skipped unless you opt in:
+210 tests. The 7 live-search tests are skipped unless you opt in:
 
 ```bash
 RUN_LIVE_SEARCH=1 pytest tests/test_search_live.py -v
