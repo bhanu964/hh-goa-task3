@@ -244,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
     best = report.best
     if best is None:
         console.fail(
-            f"No candidate passed the face-match threshold of {threshold:.2f}."
+            f"No candidate passed the face-match threshold of {threshold:g}."
         )
         console.info(
             "The search ran and returned real pages, but none of the images "
@@ -293,7 +293,7 @@ def main(argv: list[str] | None = None) -> int:
     console.detail("platform", best.candidate.platform)
     console.detail("url", best.candidate.link)
     console.detail("title", console.truncate(best.candidate.title))
-    console.detail("similarity", f"{best.similarity:.4f} cosine  (threshold {threshold:.2f})")
+    console.detail("similarity", f"{best.similarity:.4f} cosine  (threshold {threshold:g})")
     console.detail("match strength", f"{best.match.percent:.1f}%")
     console.detail("image sha256", best.image_sha256)
     # A Web article is a deliberate, first-class outcome, so only say something

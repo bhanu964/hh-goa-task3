@@ -1,0 +1,67 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      # The offline suite needs no API key and no model weights: the face
+      # detector is mocked, and the blockchain tests run a real in-process EVM.
+      # The live search tests are skipped unless RUN_LIVE_SEARCH is set, so CI
+      # never spends API credits.
+      - name: Run tests
+        run: pytest -q
+
+      # Guards against the .sol and the committed artifact drifting apart.
+      # Only the ABI is compared: solc embeds a metadata hash derived from the
+      # source path, so bytecode legitimately differs between machines.
+      - name: Check the committed contract ABI matches its source
+        if: matrix.python-version == '3.13'
+        run: |
+          python - <<'PY'
+          import json, pathlib, solcx
+
+          ARTIFACT = pathlib.Path("blockchain/artifacts/FaceEvidenceRegistry.json")
+          committed = json.loads(ARTIFACT.read_text())
+          version = committed["solcVersion"]
+
+          solcx.install_solc(version)
+          compiled = solcx.compile_files(
+              ["contracts/FaceEvidenceRegistry.sol"],
+              output_values=["abi"],
+              solc_version=version,
+              optimize=True,
+              optimize_runs=200,
+          )
+          key = next(k for k in compiled if k.endswith(":FaceEvidenceRegistry"))
+          fresh = compiled[key]["abi"]
+
+          if json.dumps(fresh, sort_keys=True) != json.dumps(committed["abi"], sort_keys=True):
+              raise SystemExit(
+                  "::error::Committed ABI is stale - run scripts/compile_contract.py"
+              )
+          print(f"ABI matches contracts/FaceEvidenceRegistry.sol ({len(fresh)} entries)")
+          PY

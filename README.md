@@ -2,6 +2,11 @@
 
 **HH Goa 2026 — Shortlisting Task 3**
 
+[![tests](https://github.com/bhanu964/hh-goa-task3/actions/workflows/tests.yml/badge.svg)](https://github.com/bhanu964/hh-goa-task3/actions/workflows/tests.yml)
+[![python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
+[![licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
+[![tests count](https://img.shields.io/badge/tests-202%20unit%20%2B%207%20live-brightgreen)](tests/)
+
 A command-line pipeline that takes a face image, finds a real matching post on
 the public web through a genuine reverse-image search, proves the face in that
 post is the same person, and anchors a tamper-evident fingerprint of the
@@ -12,6 +17,25 @@ the match decision is a cosine-similarity computation over face embeddings, and
 the blockchain write is a signed transaction waited on until it is mined. When
 a stage genuinely fails, the pipeline says so and stops. It never reports a
 success it did not achieve.
+
+> **Evaluating this?** Start with
+> **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** — a
+> requirement-by-requirement map — then
+> [§9 of the setup guide](COMPLETE_SETUP_GUIDE.md#9-verifying-the-claims-yourself),
+> which shows how to independently verify that the search is genuinely live and
+> that nothing is hardcoded.
+
+---
+
+## Documentation
+
+| Document | What it covers |
+| :--- | :--- |
+| **README** (this file) | Overview, architecture, usage, full limitations |
+| **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** | One-page cheat sheet: commands, flags, exit codes, fixes |
+| **[COMPLETE_SETUP_GUIDE.md](COMPLETE_SETUP_GUIDE.md)** | Step-by-step setup from a clean machine, Sepolia funding, troubleshooting |
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | Module design, key decisions, and what the system proves — and does not |
+| **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** | Requirement-by-requirement map, reference-repo verdicts, verification log |
 
 ---
 
@@ -180,7 +204,8 @@ cp .env.example .env
 **First run downloads the InsightFace `buffalo_l` model pack (~280 MB)** into
 `~/.insightface/models/`. That is a one-off; later runs start in a few seconds.
 
-Requires Python 3.10+ (developed and tested on 3.13, macOS arm64).
+Requires **Python 3.11+** (developed and tested on 3.13, macOS arm64).
+Python 3.10 is not supported: the pinned `onnxruntime` has no 3.10 wheels.
 
 ---
 
@@ -617,7 +642,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-173 unit tests, covering the deterministic components:
+202 unit tests, covering the deterministic components:
 
 | File | Covers |
 | :--- | :--- |
@@ -688,7 +713,7 @@ hh-goa-task3/
 ├── utils/
 │   ├── console.py               # terminal output for the screen recording
 │   └── imaging.py               # robust image input: formats, paths, EXIF
-├── tests/                       # 173 unit tests + live search integration test
+├── tests/                       # 202 unit tests + live search integration test
 ├── input/sample.jpg             # public-domain sample (see ATTRIBUTION.md)
 └── output/                      # evidence_record.json written here
 ```
