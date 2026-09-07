@@ -1,5 +1,7 @@
 """Parsing, platform tagging and filtering of Google Lens results."""
 
+import pytest
+
 from search.result_parser import (
     is_excluded,
     parse_lens_response,
@@ -98,15 +100,15 @@ def test_full_image_is_preferred_over_thumbnail():
     assert parse_lens_response(payload)[0].best_image_url == "https://i/1.jpg"
 
 
-def test_social_pages_are_ranked_before_other_sites():
+def test_the_target_platform_is_ranked_before_other_sites():
     payload = {
         "visual_matches": [
             entry(1, "https://news.example.com/a"),
-            entry(2, "https://www.instagram.com/p/ABC/"),
+            entry(2, "https://x.com/a/status/1"),
         ]
     }
     ranked = rank_candidates(parse_lens_response(payload))
-    assert ranked[0].platform == "Instagram"
+    assert ranked[0].platform == "X (Twitter)"
 
 
 def test_ranking_does_not_drop_candidates():
@@ -117,32 +119,198 @@ def test_ranking_does_not_drop_candidates():
     assert len(rank_candidates(parsed)) == len(parsed)
 
 
-def test_primary_social_platforms_get_the_top_tier():
-    from search.result_parser import TIER_PRIMARY_SOCIAL, platform_tier
+def test_x_is_the_top_tier_platform():
+    from search.result_parser import TIER_TARGET_SOCIAL, platform_tier
 
-    for name in ("Instagram", "Facebook", "X (Twitter)", "LinkedIn", "Threads"):
-        assert platform_tier(name, True) == TIER_PRIMARY_SOCIAL
+    assert platform_tier("X (Twitter)", True) == TIER_TARGET_SOCIAL
 
 
-def test_aggregators_sit_below_primary_social():
-    from search.result_parser import TIER_OTHER_SOCIAL, platform_tier
+def test_web_pages_sit_in_the_active_web_tier():
+    from search.result_parser import TIER_WEB, platform_tier
+
+    for domain in ("bbc.co.uk", "nytimes.com", "someuniversity.edu", "blog.example.org"):
+        assert platform_tier(domain, False) == TIER_WEB
+
+
+def test_other_social_platforms_rank_below_web():
+    from search.result_parser import TIER_OTHER_SOCIAL, TIER_WEB, platform_tier
+
+    for name in ("Facebook", "LinkedIn", "TikTok", "Threads"):
+        assert platform_tier(name, True) == TIER_OTHER_SOCIAL
+    assert TIER_WEB < TIER_OTHER_SOCIAL
+
+
+def test_instagram_is_deprioritised_to_the_low_signal_tier():
+    from search.result_parser import TIER_LOW_SIGNAL, platform_tier
+
+    assert platform_tier("Instagram", True) == TIER_LOW_SIGNAL
+
+
+def test_aggregators_and_video_sites_are_low_signal():
+    from search.result_parser import TIER_LOW_SIGNAL, platform_tier
 
     for name in ("Reddit", "YouTube", "Pinterest"):
-        assert platform_tier(name, True) == TIER_OTHER_SOCIAL
+        assert platform_tier(name, True) == TIER_LOW_SIGNAL
 
 
-def test_non_social_sites_get_the_lowest_tier():
-    from search.result_parser import TIER_NON_SOCIAL, platform_tier
+def test_merchandise_and_stock_photo_hosts_are_low_signal():
+    from search.result_parser import TIER_LOW_SIGNAL, platform_tier
 
-    assert platform_tier("bbc.co.uk", False) == TIER_NON_SOCIAL
+    for domain in ("amazon.com", "ebay.com", "etsy.com", "alamy.com", "gettyimages.com"):
+        assert platform_tier(domain, False) == TIER_LOW_SIGNAL
 
 
-def test_instagram_is_inspected_before_reddit():
+def test_tiers_are_strictly_ordered():
+    from search.result_parser import (
+        TIER_LOW_SIGNAL,
+        TIER_OTHER_SOCIAL,
+        TIER_TARGET_SOCIAL,
+        TIER_WEB,
+    )
+
+    assert TIER_TARGET_SOCIAL < TIER_WEB < TIER_OTHER_SOCIAL < TIER_LOW_SIGNAL
+
+
+def test_x_is_inspected_before_a_web_article():
     payload = {
         "visual_matches": [
-            entry(1, "https://www.reddit.com/r/x/comments/1/"),
-            entry(2, "https://www.instagram.com/p/ABC/"),
+            entry(1, "https://news.example.com/a"),
+            entry(2, "https://x.com/a/status/1"),
         ]
     }
     ranked = rank_candidates(parse_lens_response(payload))
-    assert ranked[0].platform == "Instagram"
+    assert ranked[0].platform == "X (Twitter)"
+
+
+def test_a_web_article_is_inspected_before_instagram():
+    payload = {
+        "visual_matches": [
+            entry(1, "https://www.instagram.com/p/ABC/"),
+            entry(2, "https://news.example.com/a"),
+        ]
+    }
+    ranked = rank_candidates(parse_lens_response(payload))
+    assert ranked[0].platform == "news.example.com"
+
+
+# --- preference resolution --------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text", ["X", "x", "  x  ", "Twitter", "twitter.com", "X (Twitter)", "x.com", "tweet"]
+)
+def test_x_aliases_resolve_to_the_canonical_name(text):
+    from search.result_parser import resolve_preference
+
+    assert resolve_preference(text) == "X (Twitter)"
+
+
+@pytest.mark.parametrize(
+    "text", ["web", "Web", "WEB SEARCH", "news", "article", "articles", "blog", "website"]
+)
+def test_web_aliases_resolve_to_the_web_sentinel(text):
+    from search.result_parser import PREFERENCE_WEB, resolve_preference
+
+    assert resolve_preference(text) == PREFERENCE_WEB
+
+
+@pytest.mark.parametrize("text", [None, "", "   "])
+def test_blank_preference_resolves_to_none(text):
+    from search.result_parser import resolve_preference
+
+    assert resolve_preference(text) is None
+
+
+def test_unrecognised_preference_passes_through_for_exact_matching():
+    from search.result_parser import resolve_preference
+
+    assert resolve_preference("bbc.co.uk") == "bbc.co.uk"
+
+
+def test_preference_description_is_readable():
+    from search.result_parser import PREFERENCE_WEB, describe_preference
+
+    assert describe_preference(PREFERENCE_WEB) == "Web results"
+    assert describe_preference("X (Twitter)") == "X (Twitter)"
+    assert describe_preference(None) == "none"
+
+
+# --- de-duplication ---------------------------------------------------------
+
+
+def test_tracking_and_locale_params_are_stripped_for_dedup():
+    from search.result_parser import normalise_link
+
+    base = "https://x.com/a/status/123"
+    for variant in (
+        "https://x.com/a/status/123?lang=en",
+        "https://www.x.com/a/status/123",
+        "https://x.com/a/status/123/",
+        "https://x.com/a/status/123#anchor",
+        "https://x.com/a/status/123?utm_source=google&ref_src=twsrc",
+    ):
+        assert normalise_link(variant) == normalise_link(base)
+
+
+def test_meaningful_query_params_are_kept():
+    from search.result_parser import normalise_link
+
+    assert normalise_link("https://e.com/p?id=7") != normalise_link("https://e.com/p?id=8")
+
+
+def test_the_same_post_with_a_lang_param_is_collapsed():
+    payload = {
+        "visual_matches": [
+            entry(1, "https://x.com/a/status/123", image="https://i/1.jpg"),
+            entry(2, "https://x.com/a/status/123?lang=en", image="https://i/1.jpg"),
+        ]
+    }
+    assert len(parse_lens_response(payload)) == 1
+
+
+def test_pages_sharing_one_thumbnail_are_collapsed():
+    """Re-checking an identical image cannot produce new evidence."""
+    payload = {
+        "visual_matches": [
+            entry(1, "https://news.example.com/a", thumbnail="https://tbn/same.jpg"),
+            entry(2, "https://news.example.com/b", thumbnail="https://tbn/same.jpg"),
+            entry(3, "https://news.example.com/c", thumbnail="https://tbn/same.jpg"),
+        ]
+    }
+    candidates = parse_lens_response(payload)
+    assert len(candidates) == 1
+    assert candidates[0].link == "https://news.example.com/a"
+
+
+def test_the_highest_ranked_page_survives_image_dedup():
+    payload = {
+        "exact_matches": [entry(1, "https://news.example.com/exact", thumbnail="https://t/x.jpg")],
+        "visual_matches": [entry(1, "https://news.example.com/visual", thumbnail="https://t/x.jpg")],
+    }
+    assert parse_lens_response(payload)[0].link.endswith("/exact")
+
+
+def test_distinct_images_are_all_kept():
+    payload = {
+        "visual_matches": [
+            entry(1, "https://news.example.com/a", thumbnail="https://tbn/1.jpg"),
+            entry(2, "https://news.example.com/b", thumbnail="https://tbn/2.jpg"),
+        ]
+    }
+    assert len(parse_lens_response(payload)) == 2
+
+
+def test_candidates_without_images_are_not_collapsed_together():
+    payload = {
+        "visual_matches": [
+            entry(1, "https://news.example.com/a"),
+            entry(2, "https://news.example.com/b"),
+        ]
+    }
+    assert len(parse_lens_response(payload)) == 2
+
+
+def test_malformed_url_does_not_break_normalisation():
+    from search.result_parser import normalise_link
+
+    assert normalise_link("http://[bad") == "http://[bad"

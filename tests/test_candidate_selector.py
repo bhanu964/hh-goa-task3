@@ -2,6 +2,8 @@
 
 from unittest.mock import Mock
 
+import pytest
+
 from face.matcher import FaceMatch
 from search.candidate_selector import CandidateSelector, VerifiedCandidate
 from search.result_parser import Candidate
@@ -53,33 +55,6 @@ def test_a_high_ranked_result_that_fails_the_face_check_is_not_selected():
     assert CandidateSelector.select_best(checked).candidate.link.endswith("/posts/2/")
 
 
-def test_highest_similarity_wins_among_social_results():
-    checked = [
-        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.55),
-        verified("https://www.facebook.com/b/posts/1/", "Facebook", True, 0.91),
-        verified("https://x.com/c/status/1", "X (Twitter)", True, 0.62),
-    ]
-    assert CandidateSelector.select_best(checked).similarity == 0.91
-
-
-def test_social_results_are_preferred_over_stronger_non_social_ones():
-    checked = [
-        verified("https://news.example.com/a", "news.example.com", False, 0.99),
-        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.60),
-    ]
-    best = CandidateSelector.select_best(checked)
-    assert best.candidate.is_social and best.similarity == 0.60
-
-
-def test_a_non_social_match_is_still_returned_when_nothing_social_passes():
-    checked = [
-        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.10),
-        verified("https://news.example.com/a", "news.example.com", False, 0.88),
-    ]
-    best = CandidateSelector.select_best(checked)
-    assert best is not None and not best.candidate.is_social
-
-
 def test_fetch_falls_back_from_full_image_to_thumbnail():
     selector = CandidateSelector(encoder=Mock(), threshold=0.45)
     selector._download = Mock(side_effect=[None, b"thumbnail-bytes"])
@@ -120,94 +95,158 @@ def test_verified_candidate_serialises_its_evidence():
     assert payload["candidate"]["platform"] == "Instagram"
 
 
-def test_instagram_is_preferred_over_a_higher_scoring_reddit_result():
-    """A personal post outranks an aggregator even on a lower score.
-
-    Reddit serves full-resolution images while Instagram only exposes a ~250px
-    thumbnail, so Reddit reliably scores higher. Tier ordering stops that
-    resolution artefact from deciding what the pipeline reports.
-    """
+def test_x_outranks_every_other_platform():
+    """X (Twitter) is the designated social target and wins on tier alone."""
     checked = [
-        verified("https://www.reddit.com/r/x/comments/1/", "Reddit", True, 0.98),
-        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.71),
+        verified("https://www.facebook.com/a/posts/1/", "Facebook", True, 0.95),
+        verified("https://news.example.com/a", "news.example.com", False, 0.93),
+        verified("https://x.com/a/status/1", "X (Twitter)", True, 0.58),
+    ]
+    assert CandidateSelector.select_best(checked).candidate.platform == "X (Twitter)"
+
+
+def test_web_article_wins_when_no_x_post_passes():
+    """Web results are first-class evidence, not a last resort."""
+    checked = [
+        verified("https://www.facebook.com/a/posts/1/", "Facebook", True, 0.91),
+        verified("https://news.example.com/story", "news.example.com", False, 0.72),
     ]
     best = CandidateSelector.select_best(checked)
-    assert best.candidate.platform == "Instagram"
+    assert best.candidate.platform == "news.example.com"
 
 
-def test_youtube_does_not_outrank_facebook():
+def test_web_article_outranks_instagram():
     checked = [
-        verified("https://www.youtube.com/watch?v=1", "YouTube", True, 0.95),
-        verified("https://www.facebook.com/a/posts/1/", "Facebook", True, 0.66),
+        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.94),
+        verified("https://news.example.com/story", "news.example.com", False, 0.61),
     ]
-    assert CandidateSelector.select_best(checked).candidate.platform == "Facebook"
+    assert CandidateSelector.select_best(checked).candidate.platform == "news.example.com"
 
 
-def test_similarity_still_decides_within_the_primary_tier():
+def test_instagram_is_deprioritised_below_other_social():
     checked = [
-        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.61),
-        verified("https://www.facebook.com/a/posts/1/", "Facebook", True, 0.88),
-        verified("https://x.com/a/status/1", "X (Twitter)", True, 0.74),
+        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.96),
+        verified("https://www.linkedin.com/in/a", "LinkedIn", True, 0.55),
+    ]
+    assert CandidateSelector.select_best(checked).candidate.platform == "LinkedIn"
+
+
+def test_merchandise_listings_never_outrank_an_article():
+    """A poster shop hosting the photo is not evidence of web presence."""
+    checked = [
+        verified("https://www.amazon.com/clp/B01", "amazon.com", False, 0.99),
+        verified("https://news.example.com/story", "news.example.com", False, 0.55),
+    ]
+    assert CandidateSelector.select_best(checked).candidate.platform == "news.example.com"
+
+
+def test_similarity_decides_between_two_web_articles():
+    checked = [
+        verified("https://news.example.com/a", "news.example.com", False, 0.61),
+        verified("https://blog.example.org/b", "blog.example.org", False, 0.88),
     ]
     assert CandidateSelector.select_best(checked).similarity == 0.88
 
 
-def test_reddit_is_still_selected_when_no_primary_social_passes():
+def test_low_signal_source_is_still_selected_when_nothing_better_passes():
     checked = [
-        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.20),
-        verified("https://www.reddit.com/r/x/comments/1/", "Reddit", True, 0.91),
-    ]
-    assert CandidateSelector.select_best(checked).candidate.platform == "Reddit"
-
-
-def test_tier_order_is_primary_then_other_social_then_the_rest():
-    checked = [
-        verified("https://news.example.com/a", "news.example.com", False, 0.99),
-        verified("https://www.reddit.com/r/x/comments/1/", "Reddit", True, 0.97),
-        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.55),
+        verified("https://news.example.com/a", "news.example.com", False, 0.12),
+        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.87),
     ]
     assert CandidateSelector.select_best(checked).candidate.platform == "Instagram"
 
 
+def test_full_tier_order_is_x_then_web_then_social_then_low_signal():
+    checked = [
+        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.99),
+        verified("https://www.facebook.com/a/posts/1/", "Facebook", True, 0.97),
+        verified("https://news.example.com/a", "news.example.com", False, 0.95),
+        verified("https://x.com/a/status/1", "X (Twitter)", True, 0.50),
+    ]
+    order = []
+    remaining = list(checked)
+    while remaining:
+        best = CandidateSelector.select_best(remaining)
+        order.append(best.candidate.platform)
+        remaining.remove(best)
+    assert order == ["X (Twitter)", "news.example.com", "Facebook", "Instagram"]
+
+
+# --- --prefer-platform ------------------------------------------------------
+
+
 def test_preferred_platform_wins_over_a_higher_score():
     checked = [
-        verified("https://www.facebook.com/a/posts/1/", "Facebook", True, 0.90),
-        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.66),
+        verified("https://news.example.com/a", "news.example.com", False, 0.90),
+        verified("https://www.facebook.com/a/posts/1/", "Facebook", True, 0.66),
     ]
-    best = CandidateSelector.select_best(checked, prefer_platform="Instagram")
-    assert best.candidate.platform == "Instagram"
+    best = CandidateSelector.select_best(checked, prefer_platform="Facebook")
+    assert best.candidate.platform == "Facebook"
 
 
-def test_platform_preference_is_case_insensitive():
+@pytest.mark.parametrize("alias", ["X", "x", "Twitter", "twitter", "X (Twitter)", "x.com"])
+def test_x_aliases_all_resolve_to_the_same_platform(alias):
     checked = [
-        verified("https://www.facebook.com/a/posts/1/", "Facebook", True, 0.90),
-        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.66),
+        verified("https://news.example.com/a", "news.example.com", False, 0.95),
+        verified("https://x.com/a/status/1", "X (Twitter)", True, 0.52),
     ]
-    assert (
-        CandidateSelector.select_best(checked, prefer_platform="instagram")
-        .candidate.platform
-        == "Instagram"
-    )
+    best = CandidateSelector.select_best(checked, prefer_platform=alias)
+    assert best.candidate.platform == "X (Twitter)"
+
+
+@pytest.mark.parametrize("alias", ["Web", "web", "news", "article", "Web Search"])
+def test_web_aliases_select_any_web_tier_article(alias):
+    checked = [
+        verified("https://x.com/a/status/1", "X (Twitter)", True, 0.95),
+        verified("https://news.example.com/a", "news.example.com", False, 0.55),
+    ]
+    best = CandidateSelector.select_best(checked, prefer_platform=alias)
+    assert best.candidate.platform == "news.example.com"
+
+
+def test_web_preference_does_not_match_a_merchandise_page():
+    """amazon.com is low-signal, so "web" must not select it over an article."""
+    checked = [
+        verified("https://www.amazon.com/clp/B01", "amazon.com", False, 0.99),
+        verified("https://news.example.com/a", "news.example.com", False, 0.51),
+    ]
+    best = CandidateSelector.select_best(checked, prefer_platform="web")
+    assert best.candidate.platform == "news.example.com"
+
+
+def test_an_exact_domain_can_be_preferred():
+    checked = [
+        verified("https://x.com/a/status/1", "X (Twitter)", True, 0.95),
+        verified("https://bbc.co.uk/news/1", "bbc.co.uk", False, 0.55),
+    ]
+    best = CandidateSelector.select_best(checked, prefer_platform="bbc.co.uk")
+    assert best.candidate.platform == "bbc.co.uk"
 
 
 def test_preference_falls_back_when_that_platform_has_no_passing_match():
     checked = [
-        verified("https://www.facebook.com/a/posts/1/", "Facebook", True, 0.90),
-        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.11),
+        verified("https://news.example.com/a", "news.example.com", False, 0.90),
+        verified("https://x.com/a/status/1", "X (Twitter)", True, 0.11),
     ]
-    best = CandidateSelector.select_best(checked, prefer_platform="Instagram")
-    assert best.candidate.platform == "Facebook"
+    best = CandidateSelector.select_best(checked, prefer_platform="X")
+    assert best.candidate.platform == "news.example.com"
 
 
 def test_preference_cannot_promote_a_failing_candidate():
     """The preference reorders verified matches; it never creates one."""
-    checked = [verified("https://www.instagram.com/p/A/", "Instagram", True, 0.10)]
-    assert CandidateSelector.select_best(checked, prefer_platform="Instagram") is None
+    checked = [verified("https://x.com/a/status/1", "X (Twitter)", True, 0.10)]
+    assert CandidateSelector.select_best(checked, prefer_platform="X") is None
 
 
-def test_no_preference_keeps_the_default_tier_ordering():
+def test_unknown_preference_is_ignored_rather_than_crashing():
+    checked = [verified("https://x.com/a/status/1", "X (Twitter)", True, 0.80)]
+    best = CandidateSelector.select_best(checked, prefer_platform="MySpace")
+    assert best.candidate.platform == "X (Twitter)"
+
+
+def test_blank_preference_is_treated_as_no_preference():
     checked = [
-        verified("https://www.reddit.com/r/x/comments/1/", "Reddit", True, 0.98),
-        verified("https://www.instagram.com/p/A/", "Instagram", True, 0.71),
+        verified("https://news.example.com/a", "news.example.com", False, 0.90),
+        verified("https://x.com/a/status/1", "X (Twitter)", True, 0.55),
     ]
-    assert CandidateSelector.select_best(checked, None).candidate.platform == "Instagram"
+    assert CandidateSelector.select_best(checked, "   ").candidate.platform == "X (Twitter)"

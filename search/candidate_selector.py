@@ -20,7 +20,13 @@ from face.detector import DetectedFace
 from face.encoder import FaceEncoder
 from face.matcher import FaceMatch, compare
 
-from .result_parser import Candidate, rank_candidates
+from .result_parser import (
+    PREFERENCE_WEB,
+    TIER_WEB,
+    Candidate,
+    rank_candidates,
+    resolve_preference,
+)
 
 BROWSER_UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -208,6 +214,20 @@ class CandidateSelector:
         )
 
     @staticmethod
+    def matches_preference(candidate: Candidate, preference: str | None) -> bool:
+        """Whether a candidate satisfies a resolved platform preference.
+
+        ``PREFERENCE_WEB`` matches any Web-tier page rather than one named
+        site, so ``--prefer-platform web`` covers news, blogs and institutional
+        pages alike.
+        """
+        if not preference:
+            return False
+        if preference == PREFERENCE_WEB:
+            return candidate.tier == TIER_WEB
+        return candidate.platform.lower() == preference.lower()
+
+    @staticmethod
     def select_best(
         checked: list[VerifiedCandidate],
         prefer_platform: str | None = None,
@@ -217,10 +237,11 @@ class CandidateSelector:
         Ordering, in priority order:
 
         1. ``prefer_platform``, when given and something from it passed.
-        2. Platform tier — a personal post on Instagram, Facebook or X is the
-           result the task is after, so it outranks an aggregator like Reddit
-           even when the aggregator serves a higher-resolution image and so
-           scores higher.
+           Accepts aliases — ``X``, ``Twitter`` and ``X (Twitter)`` are the
+           same request, and ``Web`` matches any Web-tier article.
+        2. Platform tier — X (Twitter), then Web articles, then other social
+           platforms, then low-signal sources. See
+           :func:`search.result_parser.platform_tier`.
         3. Similarity.
 
         All of this only *orders candidates that already passed the face
@@ -232,10 +253,10 @@ class CandidateSelector:
         if not passing:
             return None
 
-        wanted = (prefer_platform or "").strip().lower()
+        preference = resolve_preference(prefer_platform)
 
         def sort_key(item: VerifiedCandidate):
-            is_preferred = bool(wanted) and item.candidate.platform.lower() == wanted
-            return (not is_preferred, item.candidate.tier, -item.similarity)
+            preferred = CandidateSelector.matches_preference(item.candidate, preference)
+            return (not preferred, item.candidate.tier, -item.similarity)
 
         return min(passing, key=sort_key)

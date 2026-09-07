@@ -62,6 +62,12 @@ class SearchConfig:
     country: str = field(default_factory=lambda: os.getenv("SERPAPI_COUNTRY", "us"))
     language: str = field(default_factory=lambda: os.getenv("SERPAPI_LANGUAGE", "en"))
     max_candidates: int = field(default_factory=lambda: _get_int("MAX_CANDIDATES", 25))
+    # Which platform to favour among candidates that already passed the face
+    # check. X (Twitter) is this pipeline's designated social-media target;
+    # "Web" selects a news/blog/institutional article instead.
+    prefer_platform: str = field(
+        default_factory=lambda: os.getenv("PREFER_PLATFORM", "X (Twitter)").strip()
+    )
     max_face_checks: int = field(default_factory=lambda: _get_int("MAX_FACE_CHECKS", 12))
     download_timeout: int = field(default_factory=lambda: _get_int("DOWNLOAD_TIMEOUT", 20))
     max_download_bytes: int = field(default_factory=lambda: _get_int("MAX_DOWNLOAD_BYTES", 12_000_000))

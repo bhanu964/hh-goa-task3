@@ -64,9 +64,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--prefer-platform",
         metavar="NAME",
         help=(
-            "prefer this platform when several candidates pass the face check "
-            "(e.g. Instagram). Only reorders verified matches — it cannot make "
-            "a non-matching page into a match"
+            "prefer this platform when several candidates pass the face check. "
+            "Accepts X / Twitter / 'X (Twitter)', or Web / news / article for "
+            "any web page. Default: X (Twitter). Only reorders verified "
+            "matches — it cannot make a non-matching page into a match"
         ),
     )
     parser.add_argument(
@@ -89,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     threshold = args.threshold if args.threshold is not None else config.face.match_threshold
     max_checks = args.max_checks if args.max_checks is not None else config.search.max_face_checks
     network = (args.network or config.chain.network).strip().lower()
-    prefer_platform = args.prefer_platform or os.getenv("PREFER_PLATFORM") or None
+    prefer_platform = args.prefer_platform or config.search.prefer_platform or None
     fetch_exact = (
         not args.no_exact_matches
         and os.getenv("SERPAPI_FETCH_EXACT", "true").strip().lower() != "false"
@@ -185,9 +186,14 @@ def main(argv: list[str] | None = None) -> int:
 
     # ---------------------------------------------------------------- 4/7 + 5/7
     console.step(4, TOTAL_STEPS, "Inspecting candidates for a real match…")
-    console.info(f"Checking up to {max_checks} candidates, social-media pages first")
+    console.info(f"Checking up to {max_checks} candidates: X, then Web articles, then other social")
     if prefer_platform:
-        console.info(f"Preferring {prefer_platform} among candidates that pass the face check")
+        from search.result_parser import describe_preference, resolve_preference
+
+        console.info(
+            f"Preferring {describe_preference(resolve_preference(prefer_platform))} "
+            "among candidates that pass the face check"
+        )
 
     selector = CandidateSelector(
         encoder=encoder,
@@ -244,21 +250,44 @@ def main(argv: list[str] | None = None) -> int:
         print()
 
     console.ok("Candidate confirmed by face comparison")
-    console.info(
-        f"Selected by preference for {prefer_platform}, then similarity."
-        if prefer_platform and best.candidate.platform.lower() == prefer_platform.lower()
-        else "Selected by platform priority (personal posts before aggregators), then similarity."
+    from search.candidate_selector import CandidateSelector as _Selector
+    from search.result_parser import (
+        TIER_NAMES,
+        describe_preference,
+        resolve_preference,
     )
+
+    _preference = resolve_preference(prefer_platform)
+    if _Selector.matches_preference(best.candidate, _preference):
+        console.info(
+            f"Selected by preference for {describe_preference(_preference)}, then similarity."
+        )
+    else:
+        if _preference:
+            console.warn(
+                f"No {describe_preference(_preference)} candidate passed the face check — "
+                "fell back to platform priority."
+            )
+        console.info(
+            "Selected by platform priority "
+            "(X, then Web articles, then other social), then similarity."
+        )
+    console.detail("tier", TIER_NAMES.get(best.candidate.tier, "unknown"))
     console.detail("platform", best.candidate.platform)
     console.detail("url", best.candidate.link)
     console.detail("title", console.truncate(best.candidate.title))
     console.detail("similarity", f"{best.similarity:.4f} cosine  (threshold {threshold:.2f})")
     console.detail("match strength", f"{best.match.percent:.1f}%")
     console.detail("image sha256", best.image_sha256)
-    if not best.candidate.is_social:
+    # A Web article is a deliberate, first-class outcome, so only say something
+    # when the run genuinely found no social post at all — claiming that while
+    # X results are sitting in the list above would be simply untrue.
+    if not best.candidate.is_social and not any(
+        c.candidate.is_social for c in report.matches
+    ):
         console.warn(
-            "Best match is not a social-media page — no social result passed "
-            "the threshold. Reported as found."
+            "No social-media page passed the face check. Reporting the "
+            "verified web result instead."
         )
 
     # ---------------------------------------------------------------- 6/7

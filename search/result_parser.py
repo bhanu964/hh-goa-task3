@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Iterable
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 # Result arrays worth mining, in descending order of evidential strength.
 # ``exact_matches`` are pages hosting the very same image, so they come first.
@@ -55,6 +55,41 @@ EXCLUDED_HOSTS = (
 )
 
 
+#: Locale, tracking and share parameters that do not change the page. Stripping
+#: them collapses ``…/status/123`` and ``…/status/123?lang=en`` into one result.
+TRACKING_PARAMS = {
+    "lang", "ref", "ref_src", "ref_url", "referrer", "s", "t",
+    "fbclid", "igshid", "gclid", "mc_cid", "mc_eid", "spm", "share_id",
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+}
+
+
+def normalise_link(url: str) -> str:
+    """Canonical form of a page URL, for de-duplication only.
+
+    Lowercases the host, drops ``www.``, the fragment and tracking/locale
+    parameters, and normalises the trailing slash. The original URL is what
+    gets stored in the evidence record — this form is never shown or hashed.
+    """
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return url
+
+    host = parsed.netloc.lower()
+    host = host[4:] if host.startswith("www.") else host
+
+    query = sorted(
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if key.lower() not in TRACKING_PARAMS
+    )
+
+    return urlunparse(
+        (parsed.scheme.lower(), host, parsed.path.rstrip("/") or "/", "", urlencode(query), "")
+    )
+
+
 def is_excluded(url: str) -> bool:
     """True for search-engine internals that aren't real result pages."""
     lowered = (url or "").lower()
@@ -63,32 +98,155 @@ def is_excluded(url: str) -> bool:
     return any(fragment in lowered for fragment in EXCLUDED_HOSTS)
 
 
-# Selection priority. Tier 0 is what the task actually asks for — personal
-# social-media posts. Tier 1 platforms are social but are aggregators or
-# video sites, where a "match" is more often a news still or a reaction video
-# than a post about the person. Tier 2 is everything else.
-PRIMARY_SOCIAL = {
-    "Instagram",
+# Selection priority.
+#
+# Tier 0 — X (Twitter): the designated social-media target for this pipeline.
+# Tier 1 — Web: news articles, interviews, institutional and personal sites.
+#          These are first-class evidence: they serve full-resolution images
+#          and their pages carry real context about the person.
+# Tier 2 — other social platforms.
+# Tier 3 — low-signal sources. Instagram sits here because it exposes only a
+#          ~250 px crawler thumbnail to non-Instagram clients, and its Lens
+#          hits are frequently reels or aggregator reposts rather than a clear
+#          face image. Aggregators, video sites and merchandise listings share
+#          the tier for the same reason: the page is not evidence of the
+#          person's own presence on the web.
+TIER_TARGET_SOCIAL = 0
+TIER_WEB = 1
+TIER_OTHER_SOCIAL = 2
+TIER_LOW_SIGNAL = 3
+
+TIER_NAMES = {
+    TIER_TARGET_SOCIAL: "X (Twitter)",
+    TIER_WEB: "Web",
+    TIER_OTHER_SOCIAL: "other social",
+    TIER_LOW_SIGNAL: "low signal",
+}
+
+#: The social platform this pipeline targets.
+TARGET_SOCIAL = {"X (Twitter)"}
+
+#: Social, but not the target platform.
+OTHER_SOCIAL = {
     "Facebook",
-    "X (Twitter)",
     "LinkedIn",
     "TikTok",
     "Threads",
     "Snapchat",
     "Bluesky",
     "Mastodon",
+    "VK",
+    "Weibo",
 }
 
-TIER_PRIMARY_SOCIAL = 0
-TIER_OTHER_SOCIAL = 1
-TIER_NON_SOCIAL = 2
+#: Social platforms that reliably yield poor evidence — see the tier comment.
+LOW_SIGNAL_SOCIAL = {"Instagram", "Reddit", "YouTube", "Pinterest", "Tumblr", "Flickr"}
+
+#: Merchandise, stock-photo and print-on-demand hosts. The image is often a
+#: genuine photo of the person, but a product listing is not evidence of their
+#: presence on the web, so these never outrank an article.
+LOW_SIGNAL_DOMAINS = (
+    "amazon.",
+    "ebay.",
+    "etsy.",
+    "alamy.",
+    "gettyimages.",
+    "shutterstock.",
+    "istockphoto.",
+    "dreamstime.",
+    "posterlounge.",
+    "fineartamerica.",
+    "redbubble.",
+    "zazzle.",
+    "walmart.",
+    "aliexpress.",
+    "pixels.com",
+    "poster",
+    "printerval.",
+)
 
 
 def platform_tier(platform: str, is_social: bool) -> int:
-    """Rank a platform for selection purposes."""
-    if platform in PRIMARY_SOCIAL:
-        return TIER_PRIMARY_SOCIAL
-    return TIER_OTHER_SOCIAL if is_social else TIER_NON_SOCIAL
+    """Rank a platform for selection purposes. Lower wins."""
+    if platform in TARGET_SOCIAL:
+        return TIER_TARGET_SOCIAL
+
+    if is_social:
+        return TIER_LOW_SIGNAL if platform in LOW_SIGNAL_SOCIAL else TIER_OTHER_SOCIAL
+
+    # Non-social: the platform label is the bare domain.
+    lowered = platform.lower()
+    if any(fragment in lowered for fragment in LOW_SIGNAL_DOMAINS):
+        return TIER_LOW_SIGNAL
+    return TIER_WEB
+
+
+# --- --prefer-platform resolution -------------------------------------------
+
+#: Sentinel meaning "any Web-tier result", rather than one named platform.
+PREFERENCE_WEB = "__web__"
+
+#: Spellings a user might reasonably type for a platform.
+PLATFORM_ALIASES = {
+    "x": "X (Twitter)",
+    "x.com": "X (Twitter)",
+    "twitter": "X (Twitter)",
+    "twitter.com": "X (Twitter)",
+    "x (twitter)": "X (Twitter)",
+    "tweet": "X (Twitter)",
+    "fb": "Facebook",
+    "facebook": "Facebook",
+    "ig": "Instagram",
+    "insta": "Instagram",
+    "instagram": "Instagram",
+    "li": "LinkedIn",
+    "linkedin": "LinkedIn",
+    "tiktok": "TikTok",
+    "threads": "Threads",
+    "reddit": "Reddit",
+    "yt": "YouTube",
+    "youtube": "YouTube",
+    "pinterest": "Pinterest",
+    "bluesky": "Bluesky",
+    "mastodon": "Mastodon",
+}
+
+#: Spellings that mean "a Web-tier page" rather than a specific site.
+WEB_ALIASES = {
+    "web",
+    "web search",
+    "websearch",
+    "website",
+    "site",
+    "news",
+    "article",
+    "articles",
+    "blog",
+    "blogs",
+}
+
+
+def resolve_preference(text: str | None) -> str | None:
+    """Normalise a ``--prefer-platform`` value.
+
+    Returns a canonical platform name, the :data:`PREFERENCE_WEB` sentinel, or
+    ``None``. An unrecognised value is passed through so it can still match a
+    platform label exactly (e.g. a bare domain like ``bbc.co.uk``).
+    """
+    if not text or not text.strip():
+        return None
+
+    key = " ".join(text.strip().lower().split())
+    if key in WEB_ALIASES:
+        return PREFERENCE_WEB
+    return PLATFORM_ALIASES.get(key, text.strip())
+
+
+def describe_preference(preference: str | None) -> str:
+    """Human-readable form of a resolved preference, for terminal output."""
+    if preference is None:
+        return "none"
+    return "Web results" if preference == PREFERENCE_WEB else preference
 
 
 def platform_for_url(url: str) -> tuple[str, bool]:
@@ -171,6 +329,7 @@ def parse_lens_response(payload: dict[str, Any]) -> list[Candidate]:
     """
     candidates: list[Candidate] = []
     seen_links: set[str] = set()
+    seen_images: set[str] = set()
 
     for section in RESULT_SECTIONS:
         for entry in _entries(payload, section):
@@ -178,9 +337,24 @@ def parse_lens_response(payload: dict[str, Any]) -> list[Candidate]:
                 continue
 
             link = _clean(entry.get("link"))
-            if not link or link in seen_links or is_excluded(link):
+            if not link or is_excluded(link):
                 continue
-            seen_links.add(link)
+
+            canonical = normalise_link(link)
+            if canonical in seen_links:
+                continue
+
+            # Lens frequently returns one thumbnail for many pages on the same
+            # site. Face-checking that image again cannot produce new evidence,
+            # and each repeat costs a download and an inference from the
+            # candidate budget — so keep only the highest-ranked page per image.
+            image_key = _clean(entry.get("image")) or _clean(entry.get("thumbnail"))
+            if image_key and image_key in seen_images:
+                continue
+
+            seen_links.add(canonical)
+            if image_key:
+                seen_images.add(image_key)
 
             platform, is_social = platform_for_url(link)
             raw_position = entry.get("position")

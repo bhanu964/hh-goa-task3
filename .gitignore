@@ -21,3 +21,6 @@ blockchain/deployment.json
 
 # OS
 .DS_Store
+
+# Stray session file from eth-tester
+:memory:.ses

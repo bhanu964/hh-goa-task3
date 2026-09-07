@@ -42,8 +42,8 @@ Given `input/selfie.jpg`, the pipeline:
 1. Detects the face and generates a 512-dimensional ArcFace embedding.
 2. Uploads the image to SerpApi and runs a **live Google Lens query**, getting
    back structured JSON of pages across the public web.
-3. Parses those results into candidate pages, tags each with its platform, and
-   ranks social-media pages first.
+3. Parses those results into candidate pages, tags each with its platform,
+   de-duplicates them, and ranks X (Twitter) posts and web articles first.
 4. Downloads each candidate's image, detects the face in it, generates a second
    embedding, and computes cosine similarity against the input.
 5. Accepts a candidate **only** if that similarity clears a documented
@@ -87,11 +87,11 @@ separate concepts (see [Face verification](#face-verification) and
                                │
                                ▼
                     ┌──────────────────────┐
-                    │  Result parser       │  platform tagging, de-dup,
-                    │  + candidate ranking │  search-engine internals filtered
+                    │  Result parser       │  platform tiering, URL + image
+                    │  + candidate ranking │  de-dup, internals filtered
                     └──────────┬───────────┘
                                │
-                    candidate pages (social media first)
+            candidate pages (X, then Web articles, then other social)
                                │
                                ▼
                       candidate image  ──► InsightFace ──► 512-d embedding B
@@ -195,7 +195,7 @@ gitignored; `.env.example` documents every variable.
 | `SERPAPI_FETCH_EXACT` | `true` | Also query `exact_matches`. Strongest evidence; costs one extra credit per run |
 | `FACE_MATCH_THRESHOLD` | `0.45` | Cosine similarity required to accept a candidate |
 | `MAX_FACE_CHECKS` | `12` | How many candidate pages to download and face-check |
-| `PREFER_PLATFORM` | — | Prefer this platform among verified matches, e.g. `Instagram`. Also `--prefer-platform` |
+| `PREFER_PLATFORM` | `X (Twitter)` | Prefer this platform among verified matches. Accepts `X`/`Twitter`, `Web`/`news`/`article`, a platform name, or a bare domain. Also `--prefer-platform` |
 | `BLOCKCHAIN_NETWORK` | `memory` | `sepolia`, `local`, or `memory` |
 | `SEPOLIA_RPC_URL` | public node | Any Sepolia JSON-RPC endpoint |
 | `LOCAL_RPC_URL` | `http://127.0.0.1:8545` | Anvil / Hardhat / Ganache |
@@ -224,8 +224,14 @@ python main.py --image input/selfie.jpg --network sepolia
 # Also demonstrate that tampering with the record breaks verification
 python main.py --image input/selfie.jpg --demo-tamper
 
-# Prefer a particular platform among the candidates that pass the face check
-python main.py --image input/selfie.jpg --prefer-platform Instagram
+# Prefer a particular platform among the candidates that pass the face check.
+# X (Twitter) is the default; these are all equivalent:
+python main.py --image input/selfie.jpg --prefer-platform "X (Twitter)"
+python main.py --image input/selfie.jpg --prefer-platform X
+python main.py --image input/selfie.jpg --prefer-platform Twitter
+
+# Prefer a news article / blog / institutional page instead of a social post
+python main.py --image input/selfie.jpg --prefer-platform Web
 
 # Stricter face matching
 python main.py --image input/selfie.jpg --threshold 0.60
@@ -244,73 +250,78 @@ python main.py --image input/selfie.jpg --no-exact-matches
 
 ## Sample run
 
-Abridged real output
-(`--prefer-platform Instagram --network memory --demo-tamper`):
+Abridged real output (`--prefer-platform "X (Twitter)" --network memory`):
 
 ```
-[1/7] Loading image…
-  ✓ input/selfie.jpg
-    sha256             d901d2182ec325b81d204984a425dce1389352530a747c5b637d304bc100f9da
-
 [2/7] Detecting face and generating embedding…
-  ✓ Face detected (confidence 0.902)
+  ✓ Face detected (confidence 0.829)
+  ! 2 faces found — using the largest.
   ✓ Face embedding generated (512-d ArcFace vector)
 
 [3/7] Performing genuine reverse-image search…
-    SerpApi quota      241 searches left (Free Plan)
+    SerpApi quota      212 searches left (Free Plan)
   ⟳ Uploading image to SerpApi and querying Google Lens…
   ✓ Live search completed — results generated at runtime
     queries            all, exact_matches
-    search id          6a9bb37d1f758aba4b29186a
-  ✓ 65 candidate pages returned
-    social-media hits  10
+    search id          6a9e640b3f79e8b373a5731e
+  ✓ 98 candidate pages returned
+    social-media hits  47
+
+[4/7] Inspecting candidates for a real match…
+  · Checking up to 12 candidates: X, then Web articles, then other social
+  · Preferring X (Twitter) among candidates that pass the face check
 
 [5/7] Verifying faces against the input embedding…
-  ✓ Facebook       https://www.facebook.com/reallyamerican/posts…  cos=+0.8984  MATCH
-  ✓ Instagram      https://www.instagram.com/reel/DcjHTDJhMt0/     cos=+0.8167  MATCH
-  ✓ Instagram      https://www.instagram.com/p/Dc5KuZdDZiX/        cos=+0.7646  MATCH
-  ✓ Threads        https://www.threads.com/@paparazzi_playground…  cos=+0.6855  MATCH
-  ✓ Reddit         https://www.reddit.com/r/Presidents/comments/…  cos=+0.9790  MATCH
-  · YouTube        https://www.youtube.com/watch?v=_jxSpQiknyQ     cos=-0.1033  below threshold
+  ✓ X (Twitter)    https://x.com/Congress4TS/status/206319259134…  cos=+0.8252  MATCH
+  ✓ X (Twitter)    https://x.com/shahnawazwgl                      cos=+0.8186  MATCH
+  ✓ X (Twitter)    https://x.com/RTVnewsnetwork/status/206320780…  cos=+0.7837  MATCH
+  · X (Twitter)    https://x.com/ChatrathM/status/19370703522590…  cos=-0.0926  below threshold
+  ✓ newindianexpress.com  https://www.newindianexpress.com/states/tel…  cos=+0.8353  MATCH
+  ✓ timesofindia.indiatimes.com  https://timesofindia.indiatimes.com/city/…  cos=+0.8405  MATCH
+  ✓ vidhaatha.com  https://vidhaatha.com/telangana/komatireddy-r…  cos=+0.9721  MATCH
+  ✓ tupaki.com     https://www.tupaki.com/telangana/nalgonda       cos=+0.9724  MATCH
 
     faces compared     12
-    passed threshold   10
+    passed threshold   11
 
   · All face-verified matches, strongest first per platform:
-    Instagram          cos=+0.8167  https://www.instagram.com/reel/DcjHTDJhMt0/
-    Facebook           cos=+0.8984  https://www.facebook.com/reallyamerican/posts/today…
-    Reddit             cos=+0.9790  https://www.reddit.com/r/Presidents/comments/14zwz9…
+    X (Twitter)        cos=+0.8252  https://x.com/Congress4TS/status/2063192591341097144
+    X (Twitter)        cos=+0.8186  https://x.com/shahnawazwgl
+    tupaki.com         cos=+0.9724  https://www.tupaki.com/telangana/nalgonda
+    vidhaatha.com      cos=+0.9721  https://vidhaatha.com/telangana/komatireddy-rajagop…
+    timesofindia.indi… cos=+0.8405  https://timesofindia.indiatimes.com/city/hyderabad/…
 
   ✓ Candidate confirmed by face comparison
-  · Selected by preference for Instagram, then similarity.
-    platform           Instagram
-    url                https://www.instagram.com/reel/DcjHTDJhMt0/
-    title              On This Day | Barack Obama Makes History On 27 August 2008 ...
-    similarity         0.8167 cosine  (threshold 0.45)
+  · Selected by preference for X (Twitter), then similarity.
+    tier               X (Twitter)
+    platform           X (Twitter)
+    url                https://x.com/Congress4TS/status/2063192591341097144
+    similarity         0.8252 cosine  (threshold 0.45)
 
 [6/7] Creating integrity fingerprint…
     SHA-256:
-    467cbf0b0dad5bae3c2c96445f4dca0f91c82dccc56e6b9ea76b602966dda9b4
+    eecda8c1f07dbcf925fcf884c01a1327772bfed22f1dabb531ddc9cdbd6ebab1
 
 [7/7] Anchoring on blockchain and re-verifying…
   ✓ Transaction confirmed
-    tx hash            0x339ce427c309ba65e87a5c5b704096fd3a7645adcd2b9ce1dc45e9e1ccda2f12
+    tx hash            0xb9bfc0c34be655648a69a84d1e398e3e09ca3bd84b8c7ce1a5db5b1f6b6ad7f4
     gas used           90758
 
     Local fingerprint  (recomputed from the saved record):
-    467cbf0b0dad5bae3c2c96445f4dca0f91c82dccc56e6b9ea76b602966dda9b4
+    eecda8c1f07dbcf925fcf884c01a1327772bfed22f1dabb531ddc9cdbd6ebab1
 
     Blockchain fingerprint (read from the contract):
-    467cbf0b0dad5bae3c2c96445f4dca0f91c82dccc56e6b9ea76b602966dda9b4
+    eecda8c1f07dbcf925fcf884c01a1327772bfed22f1dabb531ddc9cdbd6ebab1
 
 ==============================================================
                    FINAL RESULT: VERIFIED ✓
 ==============================================================
 ```
 
-Note the YouTube line: a page the search returned, whose image contains a face
-that is **not** the same person, correctly rejected at −0.10. That is the face
-check doing real work rather than rubber-stamping search results.
+Note the fourth X line: a real `x.com` post the search returned, whose image
+contains a face that is **not** the same person, correctly rejected at −0.09.
+That is the face check doing real work rather than rubber-stamping search
+results — and it is rejected despite sitting on the preferred platform.
 
 The `--demo-tamper` block then alters one field of the record and re-verifies,
 producing a different local digest against the unchanged on-chain one, and
@@ -396,22 +407,44 @@ was made under.
 **Selection policy.** Among candidates that pass the threshold, the order is:
 
 1. `--prefer-platform`, if given and something from that platform passed.
-2. **Platform tier.** Personal-post platforms (Instagram, Facebook, X,
-   LinkedIn, TikTok, Threads) outrank aggregators and video sites (Reddit,
-   YouTube, Pinterest), which in turn outrank everything else.
+   Defaults to `X (Twitter)`.
+2. **Platform tier** (see below).
 3. **Similarity**, within a tier.
 
-The tier step exists because of a resolution artefact rather than any
-editorial preference: Reddit serves a full-resolution image while Instagram
-exposes only a ~250 px thumbnail, so Reddit reliably scores higher on the same
-person. Without tiering, that download-quality difference — not the evidence —
-would decide what the pipeline reports.
+| Tier | Contents | Rationale |
+| :--- | :--- | :--- |
+| 0 — **X (Twitter)** | `x.com`, `twitter.com` | The designated social-media target. Serves full-resolution `pbs.twimg.com` images to any client, and a status URL is a specific, citable post |
+| 1 — **Web** | News articles, interviews, blogs, institutional and personal sites | First-class evidence, not a fallback. Full-resolution images and real editorial context about the person |
+| 2 — Other social | Facebook, LinkedIn, TikTok, Threads, Bluesky, Mastodon | Genuine social posts, but crawler-gated images and less citable URLs |
+| 3 — Low signal | Instagram, Reddit, YouTube, Pinterest, and merchandise/stock-photo hosts (Amazon, eBay, Etsy, Alamy, Getty…) | See below |
+
+Instagram is deliberately in the bottom tier. It serves non-Instagram clients
+only a ~250 px crawler thumbnail, and its Lens hits are frequently reels or
+aggregator reposts rather than a clear face image — so it scores worse on the
+same person while also being weaker evidence. Merchandise and stock-photo
+listings sit there for a different reason: the image may genuinely be the
+person, but a poster shop hosting a photo is not evidence of that person's
+presence on the web.
+
+Ordering by tier rather than by raw score also avoids a resolution artefact —
+sites that serve full-resolution images systematically score higher than
+thumbnail-gated ones, so without tiering the *download quality* rather than the
+evidence would decide what gets reported.
+
+**De-duplication.** Before any of this, candidates are collapsed two ways:
+by canonical URL (tracking, locale and share parameters stripped, so
+`…/status/123` and `…/status/123?lang=en` are one result) and by image URL.
+Google Lens routinely returns one thumbnail for many pages on the same site;
+face-checking that identical image again cannot produce new evidence and would
+spend the candidate budget for nothing. On a live run this raised the number of
+distinct sites reached, at the same budget, from four to eight.
 
 Every one of these steps only *orders candidates that already passed the face
 check*. None of them can turn a non-matching page into a match: if nothing
 clears the threshold the pipeline reports
 `No candidate passed the face-match threshold` and exits 2, whatever platform
-was requested.
+was requested. `tests/test_candidate_selector.py` asserts this directly in
+`test_preference_cannot_promote_a_failing_candidate`.
 
 The displayed "match strength" percentage is `(cosine + 1) / 2 × 100`, purely
 so the printed figure is never negative. Every decision uses the raw cosine
@@ -556,14 +589,14 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-78 unit tests, covering the deterministic components:
+125 unit tests, covering the deterministic components:
 
 | File | Covers |
 | :--- | :--- |
 | `test_hashing.py` | Canonical JSON, digest stability, float precision, sensitivity to every field, save/load round trip |
 | `test_face_matching.py` | Cosine similarity maths, symmetry, scale invariance, range, threshold boundary, error cases |
-| `test_result_parser.py` | Platform tagging, de-duplication, exclusion of search-engine internals, malformed input, ranking |
-| `test_candidate_selector.py` | Selection policy — platform tiering, preference handling, and that a top-ranked result failing the face check is never selected |
+| `test_result_parser.py` | Platform tagging and tiering, URL normalisation, URL + image de-duplication, exclusion of search-engine internals, malformed input, ranking |
+| `test_candidate_selector.py` | Selection policy — tier order, X/Web preference aliases, and that a top-ranked result failing the face check is never selected |
 | `test_blockchain.py` | Deploy, anchor, read back, verify, tamper detection, reverts — against a real in-process EVM, no mocks |
 
 ### Live search test
@@ -623,7 +656,7 @@ hh-goa-task3/
 │   └── new_wallet.py            # generate a testnet burner wallet
 │
 ├── utils/console.py             # terminal output for the screen recording
-├── tests/                       # 78 unit tests + live search integration test
+├── tests/                       # 125 unit tests + live search integration test
 ├── input/selfie.jpg             # public-domain sample (see ATTRIBUTION.md)
 └── output/                      # evidence_record.json written here
 ```
@@ -648,9 +681,16 @@ Being honest about what this does and does not prove:
 - Private, login-walled, deleted and robots-blocked posts cannot be discovered
   or downloaded.
 - Facebook, Instagram and Threads serve full images only to their own crawlers,
-  so the pipeline usually face-checks a ~250 px Google thumbnail for those
-  platforms. Small images give lower similarity scores than a full-resolution
-  one, which biases selection toward platforms that serve full images.
+  so the pipeline face-checks a ~250 px Google thumbnail for those platforms.
+  Small images score lower than full-resolution ones, which is why selection is
+  ordered by platform tier rather than by raw similarity — otherwise download
+  quality, not evidence, would pick the winner. Instagram is deprioritised for
+  this reason and is unlikely to be selected even when it matches.
+- X (Twitter) serves full-resolution `pbs.twimg.com` images to any client,
+  which is why it is the target platform — but Lens returns X *profile*
+  pictures as well as post images, and a profile picture may be of a different
+  person than the post is about. Those are caught by the face check, not
+  assumed away.
 - Post titles come from the search engine's snapshot; a post edited after
   indexing may not match its live content.
 
