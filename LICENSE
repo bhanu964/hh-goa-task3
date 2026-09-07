@@ -38,5 +38,5 @@ This project depends on the following third-party software:
   web3.py      — MIT License, Copyright (c) 2016 Piper Merriam
                  https://github.com/ethereum/web3.py
 
-The sample image input/selfie.jpg is a work of the United States federal
+The sample image input/sample.jpg is a work of the United States federal
 government and is in the public domain. See input/ATTRIBUTION.md.

@@ -37,7 +37,7 @@ success it did not achieve.
 
 ## What it does
 
-Given `input/selfie.jpg`, the pipeline:
+Given `input/sample.jpg`, the pipeline:
 
 1. Detects the face and generates a 512-dimensional ArcFace embedding.
 2. Uploads the image to SerpApi and runs a **live Google Lens query**, getting
@@ -63,7 +63,7 @@ separate concepts (see [Face verification](#face-verification) and
 ## Architecture
 
 ```
-                        input/selfie.jpg
+                        input/sample.jpg
                                │
                                ▼
                     ┌──────────────────────┐
@@ -212,7 +212,7 @@ gitignored; `.env.example` documents every variable.
 One command runs the whole pipeline:
 
 ```bash
-python main.py --image input/selfie.jpg
+python main.py --image input/sample.jpg
 ```
 
 ### Input images
@@ -247,28 +247,28 @@ Options:
 
 ```bash
 # Anchor on the public Ethereum testnet instead of the in-process chain
-python main.py --image input/selfie.jpg --network sepolia
+python main.py --image input/sample.jpg --network sepolia
 
 # Also demonstrate that tampering with the record breaks verification
-python main.py --image input/selfie.jpg --demo-tamper
+python main.py --image input/sample.jpg --demo-tamper
 
 # Prefer a particular platform among the candidates that pass the face check.
 # X (Twitter) is the default; these are all equivalent:
-python main.py --image input/selfie.jpg --prefer-platform "X (Twitter)"
-python main.py --image input/selfie.jpg --prefer-platform X
-python main.py --image input/selfie.jpg --prefer-platform Twitter
+python main.py --image input/sample.jpg --prefer-platform "X (Twitter)"
+python main.py --image input/sample.jpg --prefer-platform X
+python main.py --image input/sample.jpg --prefer-platform Twitter
 
 # Prefer a news article / blog / institutional page instead of a social post
-python main.py --image input/selfie.jpg --prefer-platform Web
+python main.py --image input/sample.jpg --prefer-platform Web
 
 # Stricter face matching
-python main.py --image input/selfie.jpg --threshold 0.60
+python main.py --image input/sample.jpg --threshold 0.60
 
 # Check more candidates
-python main.py --image input/selfie.jpg --max-checks 20
+python main.py --image input/sample.jpg --max-checks 20
 
 # Save one SerpApi credit per run
-python main.py --image input/selfie.jpg --no-exact-matches
+python main.py --image input/sample.jpg --no-exact-matches
 ```
 
 **Exit codes:** `0` verified · `2` no match found, or verification failed ·
@@ -575,7 +575,7 @@ the on-chain record is demonstrated, which it is in all three modes.
 python scripts/new_wallet.py          # prints a throwaway address + key
 # add WALLET_PRIVATE_KEY to .env, set BLOCKCHAIN_NETWORK=sepolia
 # fund the address at https://www.alchemy.com/faucets/ethereum-sepolia
-python main.py --image input/selfie.jpg --network sepolia
+python main.py --image input/sample.jpg --network sepolia
 ```
 
 The first run deploys the contract and writes `blockchain/deployment.json`.
@@ -647,7 +647,7 @@ downloadable images come back.
 between runs:
 
 ```bash
-python main.py --image input/selfie.jpg --network memory
+python main.py --image input/sample.jpg --network memory
 ```
 
 ---
@@ -689,7 +689,7 @@ hh-goa-task3/
 │   ├── console.py               # terminal output for the screen recording
 │   └── imaging.py               # robust image input: formats, paths, EXIF
 ├── tests/                       # 173 unit tests + live search integration test
-├── input/selfie.jpg             # public-domain sample (see ATTRIBUTION.md)
+├── input/sample.jpg             # public-domain sample (see ATTRIBUTION.md)
 └── output/                      # evidence_record.json written here
 ```
 
@@ -790,7 +790,7 @@ custom-trained weights.
 
 ### Sample image
 
-`input/selfie.jpg` is a public-domain US federal government work. See
+`input/sample.jpg` is a public-domain US federal government work. See
 [`input/ATTRIBUTION.md`](input/ATTRIBUTION.md).
 
 ---

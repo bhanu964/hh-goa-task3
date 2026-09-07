@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """HH Goa 2026 — Task 3 pipeline orchestrator.
 
-    python main.py --image input/selfie.jpg
+    python main.py --image input/sample.jpg
 
 Runs the whole chain of custody in one command:
 
@@ -39,9 +39,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "examples:\n"
-            "  python main.py --image input/selfie.jpg\n"
-            "  python main.py --image input/selfie.jpg --network sepolia\n"
-            "  python main.py --image input/selfie.jpg --demo-tamper\n"
+            "  python main.py --image input/sample.jpg\n"
+            "  python main.py --image input/sample.jpg --network sepolia\n"
+            "  python main.py --image input/sample.jpg --demo-tamper\n"
         ),
     )
     parser.add_argument(

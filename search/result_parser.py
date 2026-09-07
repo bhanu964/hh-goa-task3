@@ -16,16 +16,22 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 # ``exact_matches`` are pages hosting the very same image, so they come first.
 RESULT_SECTIONS = ("exact_matches", "visual_matches", "organic_results")
 
-# domain fragment -> human-readable platform name
-SOCIAL_PLATFORMS: dict[str, str] = {
+# Registrable domain -> human-readable platform name.
+#
+# Matching is on domain boundaries, never bare substring containment: a host
+# qualifies only when it *is* the domain or is a subdomain of it. Substring
+# matching silently mislabels innocent sites — "x.com" is a substring of
+# netflix.com, vox.com, dropbox.com and peakpx.com, all of which were being
+# reported as X posts before this was tightened.
+SOCIAL_DOMAINS: dict[str, str] = {
     "instagram.com": "Instagram",
     "facebook.com": "Facebook",
     "fb.com": "Facebook",
     "fb.watch": "Facebook",
     "twitter.com": "X (Twitter)",
     "x.com": "X (Twitter)",
+    "t.co": "X (Twitter)",
     "linkedin.com": "LinkedIn",
-    "pinterest.": "Pinterest",
     "reddit.com": "Reddit",
     "redd.it": "Reddit",
     "tiktok.com": "TikTok",
@@ -38,12 +44,40 @@ SOCIAL_PLATFORMS: dict[str, str] = {
     "vk.com": "VK",
     "weibo.com": "Weibo",
     "bsky.app": "Bluesky",
-    "mastodon.": "Mastodon",
     "snapchat.com": "Snapchat",
+    "pinterest.com": "Pinterest",
 }
 
-# Search-engine plumbing rather than discoverable pages: redirect hops, cached
-# copies and image CDNs. They are not evidence and must never be anchored.
+#: Platforms that operate under many country TLDs (pinterest.co.uk,
+#: pinterest.fr, mastodon.social, …). Matched on a whole domain label.
+MULTI_TLD_SOCIAL: dict[str, str] = {
+    "pinterest": "Pinterest",
+    "mastodon": "Mastodon",
+}
+
+
+def _host_of(url: str) -> str:
+    """Lowercase host without ``www.`` or a port."""
+    try:
+        host = (urlparse(url).netloc or "").lower()
+    except ValueError:
+        return ""
+    host = host.split("@")[-1].split(":")[0]
+    return host[4:] if host.startswith("www.") else host
+
+
+def host_matches(host: str, domain: str) -> bool:
+    """True when ``host`` is ``domain`` or a subdomain of it.
+
+    This is the boundary-aware alternative to ``domain in host``.
+    """
+    return bool(host) and (host == domain or host.endswith("." + domain))
+
+
+# --- URL hygiene ------------------------------------------------------------
+
+#: Search-engine plumbing rather than discoverable pages: redirect hops, cached
+#: copies and image CDNs. They are not evidence and must never be anchored.
 EXCLUDED_HOSTS = (
     "google.com/goto",
     "google.com/url",
@@ -54,7 +88,6 @@ EXCLUDED_HOSTS = (
     "translate.google.",
 )
 
-
 #: Locale, tracking and share parameters that do not change the page. Stripping
 #: them collapses ``…/status/123`` and ``…/status/123?lang=en`` into one result.
 TRACKING_PARAMS = {
@@ -62,6 +95,14 @@ TRACKING_PARAMS = {
     "fbclid", "igshid", "gclid", "mc_cid", "mc_eid", "spm", "share_id",
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
 }
+
+
+def is_excluded(url: str) -> bool:
+    """True for search-engine internals that aren't real result pages."""
+    lowered = (url or "").lower()
+    if not lowered.startswith(("http://", "https://")):
+        return True
+    return any(fragment in lowered for fragment in EXCLUDED_HOSTS)
 
 
 def normalise_link(url: str) -> str:
@@ -88,14 +129,6 @@ def normalise_link(url: str) -> str:
     return urlunparse(
         (parsed.scheme.lower(), host, parsed.path.rstrip("/") or "/", "", urlencode(query), "")
     )
-
-
-def is_excluded(url: str) -> bool:
-    """True for search-engine internals that aren't real result pages."""
-    lowered = (url or "").lower()
-    if not lowered.startswith(("http://", "https://")):
-        return True
-    return any(fragment in lowered for fragment in EXCLUDED_HOSTS)
 
 
 # Selection priority.
@@ -142,27 +175,18 @@ OTHER_SOCIAL = {
 #: Social platforms that reliably yield poor evidence — see the tier comment.
 LOW_SIGNAL_SOCIAL = {"Instagram", "Reddit", "YouTube", "Pinterest", "Tumblr", "Flickr"}
 
-#: Merchandise, stock-photo and print-on-demand hosts. The image is often a
-#: genuine photo of the person, but a product listing is not evidence of their
-#: presence on the web, so these never outrank an article.
+#: Merchandise, stock-photo, wallpaper and print-on-demand hosts. The image is
+#: often a genuine photo of the person, but a product or wallpaper listing is
+#: not evidence of their presence on the web, so these never outrank an article.
 LOW_SIGNAL_DOMAINS = (
-    "amazon.",
-    "ebay.",
-    "etsy.",
-    "alamy.",
-    "gettyimages.",
-    "shutterstock.",
-    "istockphoto.",
-    "dreamstime.",
-    "posterlounge.",
-    "fineartamerica.",
-    "redbubble.",
-    "zazzle.",
-    "walmart.",
-    "aliexpress.",
-    "pixels.com",
-    "poster",
-    "printerval.",
+    "amazon.com", "amazon.in", "amazon.co.uk", "ebay.com", "etsy.com",
+    "aliexpress.com", "walmart.com", "flipkart.com",
+    "alamy.com", "gettyimages.com", "shutterstock.com", "istockphoto.com",
+    "dreamstime.com", "123rf.com", "depositphotos.com", "stockfreeimages.com",
+    "posterlounge.com", "allposters.com", "fineartamerica.com", "pixels.com",
+    "redbubble.com", "zazzle.com", "displate.com", "printerval.com",
+    "peakpx.com", "wallpaperflare.com", "wallhaven.cc", "wallpapercave.com",
+    "hdwallpapers.in", "pxfuel.com", "pngwing.com", "pngegg.com",
 )
 
 
@@ -175,8 +199,8 @@ def platform_tier(platform: str, is_social: bool) -> int:
         return TIER_LOW_SIGNAL if platform in LOW_SIGNAL_SOCIAL else TIER_OTHER_SOCIAL
 
     # Non-social: the platform label is the bare domain.
-    lowered = platform.lower()
-    if any(fragment in lowered for fragment in LOW_SIGNAL_DOMAINS):
+    host = platform.lower()
+    if any(host_matches(host, domain) for domain in LOW_SIGNAL_DOMAINS):
         return TIER_LOW_SIGNAL
     return TIER_WEB
 
@@ -258,14 +282,21 @@ def platform_for_url(url: str) -> tuple[str, bool]:
     if not url:
         return "Unknown", False
 
-    host = (urlparse(url).netloc or "").lower()
-    host = host[4:] if host.startswith("www.") else host
+    host = _host_of(url)
+    if not host:
+        return "Unknown", False
 
-    for fragment, name in SOCIAL_PLATFORMS.items():
-        if fragment in host:
+    for domain, name in SOCIAL_DOMAINS.items():
+        if host_matches(host, domain):
             return name, True
 
-    return host or "Unknown", False
+    # Country-TLD platforms: match a whole label, so "pinterest.co.uk" counts
+    # but "pinterest-clone.com" does not.
+    for label in host.split(".")[:-1]:
+        if label in MULTI_TLD_SOCIAL:
+            return MULTI_TLD_SOCIAL[label], True
+
+    return host, False
 
 
 @dataclass(frozen=True)

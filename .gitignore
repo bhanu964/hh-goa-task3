@@ -16,6 +16,12 @@ venv/
 output/*
 !output/.gitkeep
 
+# Your own input images stay local. Only the public-domain sample is tracked,
+# so nobody's photo is committed to a public repo by accident.
+input/*
+!input/sample.jpg
+!input/ATTRIBUTION.md
+
 # Local blockchain state
 blockchain/deployment.json
 

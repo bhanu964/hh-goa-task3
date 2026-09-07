@@ -314,3 +314,99 @@ def test_malformed_url_does_not_break_normalisation():
     from search.result_parser import normalise_link
 
     assert normalise_link("http://[bad") == "http://[bad"
+
+
+# --- domain matching must respect boundaries --------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.peakpx.com/en/hd-wallpaper",
+        "https://www.netflix.com/title/1",
+        "https://www.vox.com/article",
+        "https://www.dropbox.com/s/abc",
+        "https://www.xbox.com/games",
+        "https://notx.com/page",
+        "https://myinstagram-fan.com/p",
+        "https://facebook-clone.net/post",
+    ],
+)
+def test_lookalike_domains_are_not_mistaken_for_social_platforms(url):
+    """Substring matching reported netflix.com and peakpx.com as X posts."""
+    platform, is_social = platform_for_url(url)
+    assert not is_social
+    assert platform != "X (Twitter)"
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
+        ("https://x.com/user/status/1", "X (Twitter)"),
+        ("https://www.x.com/user", "X (Twitter)"),
+        ("https://twitter.com/user", "X (Twitter)"),
+        ("https://mobile.twitter.com/user", "X (Twitter)"),
+        ("https://www.instagram.com/p/A/", "Instagram"),
+        ("https://m.facebook.com/x/posts/1", "Facebook"),
+        ("https://uk.linkedin.com/in/someone", "LinkedIn"),
+        ("https://old.reddit.com/r/x/1", "Reddit"),
+    ],
+)
+def test_real_platform_domains_and_subdomains_are_recognised(url, expected):
+    platform, is_social = platform_for_url(url)
+    assert (platform, is_social) == (expected, True)
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
+        ("https://www.pinterest.co.uk/pin/1", "Pinterest"),
+        ("https://www.pinterest.fr/pin/1", "Pinterest"),
+        ("https://mastodon.social/@someone", "Mastodon"),
+        ("https://social.mastodon.xyz/@a", "Mastodon"),
+    ],
+)
+def test_country_tld_platforms_match_on_a_whole_label(url, expected):
+    assert platform_for_url(url)[0] == expected
+
+
+def test_a_hyphenated_lookalike_is_not_a_country_tld_match():
+    assert platform_for_url("https://pinterest-clone.com/x")[1] is False
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.peakpx.com/wallpaper",
+        "https://wallpaperflare.com/x",
+        "https://www.amazon.com/dp/B01",
+        "https://www.gettyimages.com/photo/1",
+        "https://www.alamy.com/stock-photo",
+    ],
+)
+def test_stock_and_wallpaper_hosts_are_low_signal(url):
+    from search.result_parser import TIER_LOW_SIGNAL, platform_tier
+
+    platform, is_social = platform_for_url(url)
+    assert platform_tier(platform, is_social) == TIER_LOW_SIGNAL
+
+
+def test_a_news_site_is_not_swept_into_low_signal():
+    from search.result_parser import TIER_WEB, platform_tier
+
+    platform, is_social = platform_for_url("https://www.theposterpost.com/story")
+    assert platform_tier(platform, is_social) == TIER_WEB
+
+
+def test_host_matches_helper_is_boundary_aware():
+    from search.result_parser import host_matches
+
+    assert host_matches("x.com", "x.com")
+    assert host_matches("mobile.x.com", "x.com")
+    assert not host_matches("peakpx.com", "x.com")
+    assert not host_matches("notx.com", "x.com")
+    assert not host_matches("", "x.com")
+
+
+def test_port_and_userinfo_in_host_are_ignored():
+    assert platform_for_url("https://user@x.com:443/a/status/1")[0] == "X (Twitter)"

@@ -12,7 +12,7 @@ It is skipped unless a key is configured, and it spends real API credits:
 
 Manual equivalent, if you would rather watch it run:
 
-    python main.py --image input/selfie.jpg --network memory
+    python main.py --image input/sample.jpg --network memory
 """
 
 import os
