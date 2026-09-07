@@ -20,7 +20,18 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import warnings
 from pathlib import Path
+
+# InsightFace calls a scikit-image API that is deprecated upstream. The warning
+# is emitted on stderr from inside the library on every face alignment, is not
+# actionable here, and would clutter a screen recording. Suppressed narrowly by
+# message and category so genuine warnings still surface.
+warnings.filterwarnings(
+    "ignore",
+    message=r"`estimate` is deprecated.*",
+    category=FutureWarning,
+)
 
 from config import OUTPUT_DIR, load_config
 from utils import console
