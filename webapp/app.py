@@ -19,7 +19,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -33,6 +33,55 @@ STATIC = Path(__file__).resolve().parent / "static"
 SAMPLE = ROOT / "input" / "sample.jpg"
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+
+# Quota protection.
+#
+# A public demo runs on a personal SerpApi key with a finite monthly allowance
+# (250 searches on the free plan; each run spends 1-2). Without a cap, a single
+# visitor with a loop could exhaust a month of quota in minutes and take the
+# demo down for everyone. These limits are deliberately generous enough for a
+# genuine evaluator and tight enough to make abuse pointless.
+RUNS_PER_IP_PER_HOUR = int(os.getenv("RUNS_PER_IP_PER_HOUR", "6"))
+RUNS_PER_DAY_TOTAL = int(os.getenv("RUNS_PER_DAY_TOTAL", "60"))
+
+_ip_hits: dict[str, list[float]] = {}
+_day_hits: list[float] = []
+
+
+def _client_ip(request) -> str:
+    """Best-effort client address, honouring the proxy header hosts set."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _check_quota(ip: str) -> str | None:
+    """Return an error message when a limit is hit, else None."""
+    now = time.time()
+
+    _day_hits[:] = [t for t in _day_hits if now - t < 86400]
+    if len(_day_hits) >= RUNS_PER_DAY_TOTAL:
+        return (
+            "This public demo has reached its daily run limit, which protects a "
+            "personal search-API quota. Try again tomorrow, or clone the repo and "
+            "run it locally with your own key — see the README."
+        )
+
+    hits = [t for t in _ip_hits.get(ip, []) if now - t < 3600]
+    _ip_hits[ip] = hits
+    if len(hits) >= RUNS_PER_IP_PER_HOUR:
+        return (
+            f"Rate limit: {RUNS_PER_IP_PER_HOUR} runs per hour per visitor. "
+            "Each run spends real search-API credits. Please try again later."
+        )
+    return None
+
+
+def _record_run(ip: str) -> None:
+    now = time.time()
+    _ip_hits.setdefault(ip, []).append(now)
+    _day_hits.append(now)
 
 app = FastAPI(title="HH Goa 2026 — Task 3", docs_url=None, redoc_url=None)
 
@@ -48,6 +97,8 @@ async def healthz():
         "search_configured": bool(config.search.api_key),
         "network": config.chain.network,
         "models_loaded": runner._detector is not None,
+        "runs_today": len(_day_hits),
+        "daily_limit": RUNS_PER_DAY_TOTAL,
     }
 
 
@@ -109,6 +160,7 @@ async def _stream(image_path: Path, cleanup: Path | None, options: dict):
 
 @app.post("/api/run")
 async def api_run(
+    request: Request,
     image: UploadFile | None = File(default=None),
     use_sample: str = Form(default="false"),
     prefer_platform: str = Form(default=""),
@@ -119,6 +171,11 @@ async def api_run(
         raise HTTPException(
             429, "A run is already in progress. This demo processes one image at a time."
         )
+
+    ip = _client_ip(request)
+    quota_error = _check_quota(ip)
+    if quota_error:
+        raise HTTPException(429, quota_error)
 
     cleanup: Path | None = None
     if use_sample.lower() == "true" or image is None:
@@ -150,6 +207,8 @@ async def api_run(
             options["max_checks"] = max(1, min(25, int(max_checks)))
         except ValueError:
             raise HTTPException(400, "max_checks must be an integer") from None
+
+    _record_run(ip)
 
     async def guarded():
         async with _run_lock:

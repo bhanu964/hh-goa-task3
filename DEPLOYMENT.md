@@ -82,35 +82,64 @@ choose). `/healthz` returns readiness JSON.
 
 ---
 
-## Option B — Hugging Face Spaces (free, and it fits)
+## Option B — Hugging Face Spaces (requires PRO)
 
-If you would rather not pay, Spaces' free CPU tier provides **16 GB RAM** —
-far more than needed — and is built for exactly this kind of ML demo.
-
-1. Create a Space at [huggingface.co/new-space](https://huggingface.co/new-space),
-   SDK **Docker**.
-2. Push this repository to the Space's git remote.
-3. In **Settings → Variables and secrets**, add `SERPAPI_API_KEY` as a
-   *secret*, and `BLOCKCHAIN_NETWORK=memory` as a variable.
-4. Spaces listens on port 7860, so add to the Dockerfile or override the
-   command:
-   ```dockerfile
-   ENV PORT=7860
-   EXPOSE 7860
-   ```
-
-URL: `https://huggingface.co/spaces/<user>/<space>`.
-
-## Option C — Fly.io
-
-`fly launch` then set a machine with 1 GB:
+The container is already Spaces-ready: it listens on 7860, runs as uid 1000,
+and writes only to `/tmp`. A deploy script is included:
 
 ```bash
-fly launch --dockerfile Dockerfile --no-deploy
-fly secrets set SERPAPI_API_KEY=...
-fly scale memory 1024
-fly deploy
+pip install huggingface_hub
+hf auth login                    # or export HF_TOKEN
+python scripts/deploy_hf.py      # creates the Space, uploads, sets the secret
 ```
+
+**However, Docker Spaces are no longer free.** Attempting to create one on a
+free account returns:
+
+```
+402 Payment Required
+Static Spaces are free for everyone, but hosting Gradio and Docker Spaces
+on free cpu-basic requires a PRO subscription.
+```
+
+Only *static* Spaces are free, and a static Space cannot run Python. With a PRO
+subscription the script above deploys in one command.
+
+## Option C — Google Cloud Run (usage-based free allowance)
+
+The most practical genuinely-low-cost option: memory is configurable well above
+1 GB, it scales to zero so an idle demo costs nothing, and the monthly free
+allowance comfortably covers demo traffic. It does require a Google Cloud
+account with billing enabled.
+
+```bash
+gcloud run deploy hh-goa-task3 \
+  --source . --region us-central1 \
+  --memory 2Gi --cpu 2 --timeout 600 \
+  --min-instances 0 --allow-unauthenticated \
+  --set-env-vars BLOCKCHAIN_NETWORK=memory,OUTPUT_DIR=/tmp/hhgoa-output,INSIGHTFACE_HOME=/opt/insightface \
+  --set-secrets SERPAPI_API_KEY=serpapi-key:latest
+```
+
+Check current [Cloud Run pricing](https://cloud.google.com/run/pricing) before
+relying on the free allowance.
+
+## Option D — Fly.io / Koyeb / Railway
+
+* **Fly.io** — no longer has a free tier; paid machines work fine at 1 GB.
+* **Koyeb** — free instance is 512 MB, which is below the measured floor.
+* **Railway** — trial credit only, then usage-based.
+
+## The honest summary
+
+Every 512 MB free tier is ruled out by measurement, and the 2020-era generous
+free PaaS tiers are gone. A live URL for this project costs either a small
+subscription (HF PRO), a paid instance (Render Standard, Fly), or a
+usage-metered account (Cloud Run).
+
+**The task does not require a hosted site** — "You do not need to build or host
+a project website." The CLI plus the screen recording is the complete
+submission; this web UI is a bonus.
 
 ---
 

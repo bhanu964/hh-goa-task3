@@ -10,6 +10,7 @@ see README for the pretrained-model licence note).
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -75,10 +76,16 @@ class FaceDetector:
         model_pack: str = "buffalo_l",
         det_size: int = 640,
         det_threshold: float = 0.5,
+        model_root: str | None = None,
     ) -> None:
         self.model_pack = model_pack
         self.det_size = det_size
         self.det_threshold = det_threshold
+        # Where the model pack lives. Defaults to InsightFace's own
+        # ``~/.insightface``; container images set INSIGHTFACE_HOME so the
+        # weights baked in at build time are found instead of being
+        # re-downloaded (or failing outright on a read-only filesystem).
+        self.model_root = model_root or os.getenv("INSIGHTFACE_HOME") or "~/.insightface"
         self._app = None
 
     def _ensure_loaded(self):
@@ -98,6 +105,7 @@ class FaceDetector:
             with contextlib.redirect_stdout(noise):
                 app = FaceAnalysis(
                     name=self.model_pack,
+                    root=self.model_root,
                     allowed_modules=["detection", "recognition"],
                     providers=["CPUExecutionProvider"],
                 )

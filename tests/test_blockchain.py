@@ -132,3 +132,22 @@ def test_a_zero_fingerprint_is_refused_by_the_contract(deployed):
     writer, address = deployed
     with pytest.raises(ChainError):
         writer.anchor("00" * 32, address)
+
+
+def test_deploy_survives_an_unwritable_app_directory(chain, monkeypatch, tmp_path):
+    """A read-only filesystem must not fail an otherwise good deployment.
+
+    Containers (Hugging Face Spaces, Render, any hardened runtime) may mount
+    the application directory read-only. deployment.json is a convenience note
+    for reusing a contract address, not something the pipeline needs.
+    """
+    import blockchain.writer as writer_module
+
+    unwritable = tmp_path / "nope" / "deployment.json"  # parent does not exist
+    monkeypatch.setattr(writer_module, "DEPLOYMENT_PATH", unwritable)
+
+    writer = EvidenceWriter(chain)
+    address = writer.deploy()
+
+    assert address.startswith("0x")
+    assert not unwritable.exists()

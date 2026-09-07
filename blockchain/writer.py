@@ -165,22 +165,34 @@ class EvidenceWriter:
         )
         receipt = self._send(transaction)
         address = receipt["contractAddress"]
-
-        DEPLOYMENT_PATH.write_text(
-            json.dumps(
-                {
-                    "network": self.connection.network,
-                    "contractAddress": address,
-                    "deployedBy": self.connection.account_address,
-                    "blockNumber": receipt["blockNumber"],
-                    "txHash": self.web3.to_hex(receipt["transactionHash"]),
-                },
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+        self._record_deployment(address, receipt)
         return address
+
+    def _record_deployment(self, address: str, receipt) -> None:
+        """Note the deployment for reuse on later runs.
+
+        Best-effort only: this is a convenience so a repeat run can set
+        CONTRACT_ADDRESS instead of paying to redeploy. A container with a
+        read-only or non-writable app directory must not fail a otherwise
+        successful deployment just because this note could not be saved.
+        """
+        try:
+            DEPLOYMENT_PATH.write_text(
+                json.dumps(
+                    {
+                        "network": self.connection.network,
+                        "contractAddress": address,
+                        "deployedBy": self.connection.account_address,
+                        "blockNumber": receipt["blockNumber"],
+                        "txHash": self.web3.to_hex(receipt["transactionHash"]),
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
 
     def get_contract(self, address: str | None = None):
         """Return a bound contract instance, deploying one if needed.

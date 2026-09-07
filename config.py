@@ -13,7 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-OUTPUT_DIR = PROJECT_ROOT / "output"
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR") or (PROJECT_ROOT / "output"))
 ARTIFACT_PATH = PROJECT_ROOT / "blockchain" / "artifacts" / "FaceEvidenceRegistry.json"
 
 load_dotenv(PROJECT_ROOT / ".env")
