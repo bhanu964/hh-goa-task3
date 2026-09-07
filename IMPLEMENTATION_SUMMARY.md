@@ -15,7 +15,7 @@ which decisions were made and why, and what this system honestly cannot do.
 | **Run it** | `python main.py --image input/sample.jpg` |
 | **Stack** | InsightFace (ArcFace) · SerpApi → Google Lens · `hashlib` · web3.py → Ethereum |
 | **Runtime dependencies** | 12 direct |
-| **Application code** | ~2,200 lines across 19 modules |
+| **Application code** | ~2255 non-blank lines across 19 modules |
 | **Tests** | 202 unit + 7 live integration |
 | **Smart contract** | `FaceEvidenceRegistry.sol`, Solidity 0.8.24, 928 bytes compiled |
 | **Networks supported** | Ethereum Sepolia · local JSON-RPC node · in-process py-evm |
@@ -224,7 +224,7 @@ failures.
 
 ## 5. Testing
 
-209 tests, ~1.5 s for the offline suite.
+209 tests: 202 offline (~1.5 s, no network, no model weights) plus 7 live.
 
 | File | Tests | Covers |
 | :--- | ---: | :--- |

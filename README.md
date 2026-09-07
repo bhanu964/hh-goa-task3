@@ -303,78 +303,107 @@ python main.py --image input/sample.jpg --no-exact-matches
 
 ## Sample run
 
-Abridged real output (`--prefer-platform "X (Twitter)" --network memory`):
+Abridged real output of `python main.py --image input/sample.jpg --demo-tamper`
+— reproducible from a fresh clone, since `sample.jpg` ships with the repo:
 
 ```
+[1/7] Loading image…
+  ✓ input/sample.jpg
+    format             JPEG  (720x900)
+    sha256             d901d2182ec325b81d204984a425dce1389352530a747c5b637d304bc100f9da
+
 [2/7] Detecting face and generating embedding…
-  ✓ Face detected (confidence 0.829)
-  ! 2 faces found — using the largest.
+  ✓ Face detected (confidence 0.902)
   ✓ Face embedding generated (512-d ArcFace vector)
 
 [3/7] Performing genuine reverse-image search…
-    SerpApi quota      212 searches left (Free Plan)
+    SerpApi quota      178 searches left (Free Plan)
   ⟳ Uploading image to SerpApi and querying Google Lens…
   ✓ Live search completed — results generated at runtime
     queries            all, exact_matches
-    search id          6a9e640b3f79e8b373a5731e
-  ✓ 98 candidate pages returned
-    social-media hits  47
+    search id          6a9e7dd6bca7e5278f4c6216
+  ✓ 268 candidate pages returned
+    social-media hits  118
 
 [4/7] Inspecting candidates for a real match…
   · Checking up to 12 candidates: X, then Web articles, then other social
   · Preferring X (Twitter) among candidates that pass the face check
 
 [5/7] Verifying faces against the input embedding…
-  ✓ X (Twitter)    https://x.com/Congress4TS/status/206319259134…  cos=+0.8252  MATCH
-  ✓ X (Twitter)    https://x.com/shahnawazwgl                      cos=+0.8186  MATCH
-  ✓ X (Twitter)    https://x.com/RTVnewsnetwork/status/206320780…  cos=+0.7837  MATCH
-  · X (Twitter)    https://x.com/ChatrathM/status/19370703522590…  cos=-0.0926  below threshold
-  ✓ newindianexpress.com  https://www.newindianexpress.com/states/tel…  cos=+0.8353  MATCH
-  ✓ timesofindia.indiatimes.com  https://timesofindia.indiatimes.com/city/…  cos=+0.8405  MATCH
-  ✓ vidhaatha.com  https://vidhaatha.com/telangana/komatireddy-r…  cos=+0.9721  MATCH
-  ✓ tupaki.com     https://www.tupaki.com/telangana/nalgonda       cos=+0.9724  MATCH
+  ✓ X (Twitter)    https://x.com/TheePopCore/status/208448950327…  cos=+0.8943  MATCH
+  ✓ X (Twitter)    https://x.com/PollTracker2024/status/20832911…  cos=+0.8896  MATCH
+  · X (Twitter)    https://x.com/mkratsios47/status/209521315932…  cos=+0.0462  below threshold
+  ✓ commons.wikimedia.org  https://commons.wikimedia.org/wiki/File:Pre…  cos=+0.9272  MATCH
+  ✓ usatoday.com   https://www.usatoday.com/story/theoval/2013/0…  cos=+0.9227  MATCH
+  ✓ worcestermag.com  https://www.worcestermag.com/story/news/pol…  cos=+0.9075  MATCH
 
     faces compared     12
+    images unavailable 0
+    no face in image   0
     passed threshold   11
-
-  · All face-verified matches, strongest first per platform:
-    X (Twitter)        cos=+0.8252  https://x.com/Congress4TS/status/2063192591341097144
-    X (Twitter)        cos=+0.8186  https://x.com/shahnawazwgl
-    tupaki.com         cos=+0.9724  https://www.tupaki.com/telangana/nalgonda
-    vidhaatha.com      cos=+0.9721  https://vidhaatha.com/telangana/komatireddy-rajagop…
-    timesofindia.indi… cos=+0.8405  https://timesofindia.indiatimes.com/city/hyderabad/…
 
   ✓ Candidate confirmed by face comparison
   · Selected by preference for X (Twitter), then similarity.
     tier               X (Twitter)
     platform           X (Twitter)
-    url                https://x.com/Congress4TS/status/2063192591341097144
-    similarity         0.8252 cosine  (threshold 0.45)
+    url                https://x.com/TheePopCore/status/2084489503278154324
+    similarity         0.8943 cosine  (threshold 0.45)
 
 [6/7] Creating integrity fingerprint…
+  ✓ Deterministic record built (canonical JSON, sorted keys, UTF-8)
     SHA-256:
-    eecda8c1f07dbcf925fcf884c01a1327772bfed22f1dabb531ddc9cdbd6ebab1
+    b0558c9598d3d55b9c599145140fe9597701d49fd7e200cccef7706243a5c964
 
 [7/7] Anchoring on blockchain and re-verifying…
+  ✓ Connected: In-process EVM (py-evm / eth-tester, ephemeral)
+  ⟳ Submitting transaction…
   ✓ Transaction confirmed
-    tx hash            0xb9bfc0c34be655648a69a84d1e398e3e09ca3bd84b8c7ce1a5db5b1f6b6ad7f4
-    gas used           90758
+    tx hash            0x5bb363665dfe3d2ce536efcae27ef28b96396e8ff62c139ee2d55c2ed8f018c3
+    block              2
+    gas used           90746
+  ⟳ Reading the record back from the chain…
 
     Local fingerprint  (recomputed from the saved record):
-    eecda8c1f07dbcf925fcf884c01a1327772bfed22f1dabb531ddc9cdbd6ebab1
+    b0558c9598d3d55b9c599145140fe9597701d49fd7e200cccef7706243a5c964
 
     Blockchain fingerprint (read from the contract):
-    eecda8c1f07dbcf925fcf884c01a1327772bfed22f1dabb531ddc9cdbd6ebab1
+    b0558c9598d3d55b9c599145140fe9597701d49fd7e200cccef7706243a5c964
 
 ==============================================================
                    FINAL RESULT: VERIFIED ✓
 ==============================================================
+
+
+==============================================================
+   TAMPER DEMONSTRATION
+   proving the check actually detects changes
+==============================================================
+  · Appending text to the discovered title, then re-verifying…
+
+    Tampered local fingerprint:
+    3b472defa05495439b30f07fdd991191462ce23cffa4b7cf375b5b06c92d629f
+
+    Blockchain fingerprint (unchanged, immutable):
+    b0558c9598d3d55b9c599145140fe9597701d49fd7e200cccef7706243a5c964
+  ✓ Mismatch detected: the altered record no longer matches the chain.
+
+==============================================================
+               TAMPERED RECORD: NOT VERIFIED ✗
+==============================================================
 ```
 
-Note the fourth X line: a real `x.com` post the search returned, whose image
-contains a face that is **not** the same person, correctly rejected at −0.09.
-That is the face check doing real work rather than rubber-stamping search
-results — and it is rejected despite sitting on the preferred platform.
+Two details worth noticing.
+
+**The third X line is a rejection.** A real `x.com` post that the search
+returned, whose image contains a face that is *not* the same person, scored
+**+0.046** and was discarded — despite sitting on the preferred platform and
+despite the search engine having surfaced it. That is the face check doing real
+work rather than rubber-stamping search results.
+
+**Your run will not look identical.** The search id, candidate set and final
+SHA-256 change every run, because Google Lens is queried live with
+`no_cache=true` and its index moves. That variance is the evidence the search is
+genuine.
 
 The `--demo-tamper` block then alters one field of the record and re-verifies,
 producing a different local digest against the unchanged on-chain one, and
